@@ -1,3 +1,15 @@
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 10000;
+
+app.get('/', (req, res) => {
+  res.send('RadarBlox 7/24 Aktif!');
+});
+
+app.listen(port, () => {
+  console.log(`Port ${port} üzerinde web sunucusu başarıyla başlatıldı.`);
+});
+
 const { 
   Client, 
   GatewayIntentBits, 
@@ -50,7 +62,8 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-client.once('ready', async () => {
+// Client Ready Event
+client.once('clientReady', async () => {
   console.log(`${client.user.tag} is online and ready!`);
   try {
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
@@ -61,117 +74,118 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  
-  // 1. /gen Command
-  if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
-    const lastUsed = cooldowns.get(interaction.user.id);
-    const now = Date.now();
-    const cooldownAmount = 10 * 1000;
+  try {
+    // 1. /gen Command
+    if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
+      const lastUsed = cooldowns.get(interaction.user.id);
+      const now = Date.now();
+      const cooldownAmount = 10 * 1000;
 
-    if (lastUsed && (now - lastUsed < cooldownAmount)) {
-      const timeLeft = ((cooldownAmount - (now - lastUsed)) / 1000).toFixed(1);
-      return await interaction.reply({ 
-        content: `⏳ **Anti-Spam active! Please wait ${timeLeft}s before generating again.**`, 
-        ephemeral: true 
+      if (lastUsed && (now - lastUsed < cooldownAmount)) {
+        const timeLeft = ((cooldownAmount - (now - lastUsed)) / 1000).toFixed(1);
+        return await interaction.reply({ 
+          content: `⏳ **Anti-Spam active! Please wait ${timeLeft}s before generating again.**`, 
+          flags: 64 
+        });
+      }
+
+      const yearSelect = new StringSelectMenuBuilder()
+        .setCustomId(`select_year_${interaction.user.id}`)
+        .setPlaceholder('Select Account Creation Year (2006 - 2016)')
+        .addOptions(
+          Array.from({ length: 11 }, (_, i) => {
+            const year = (2006 + i).toString();
+            return { label: year, value: year, description: `Accounts created in ${year}` };
+          })
+        );
+
+      const row = new ActionRowBuilder().addComponents(yearSelect);
+
+      await interaction.reply({
+        content: 'Please select the creation year for the account:',
+        components: [row]
       });
     }
 
-    const yearSelect = new StringSelectMenuBuilder()
-      .setCustomId(`select_year_${interaction.user.id}`)
-      .setPlaceholder('Select Account Creation Year (2006 - 2016)')
-      .addOptions(
-        Array.from({ length: 11 }, (_, i) => {
-          const year = (2006 + i).toString();
-          return { label: year, value: year, description: `Accounts created in ${year}` };
-        })
-      );
+    // 2. Year Selection
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
+      const ownerId = interaction.customId.split('_')[2];
 
-    const row = new ActionRowBuilder().addComponents(yearSelect);
+      if (interaction.user.id !== ownerId) {
+        return await interaction.reply({ content: '❌ This menu is not for you! Run `/gen` to start your own.', flags: 64 });
+      }
 
-    await interaction.reply({
-      content: 'Please select the creation year for the account:',
-      components: [row],
-      ephemeral: false
-    });
-  }
+      const selectedYear = interaction.values[0];
 
-  // 2. Year Selection
-  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
-    const ownerId = interaction.customId.split('_')[2];
+      const btnNoNumber = new ButtonBuilder()
+        .setCustomId(`gen_no_number_${selectedYear}_${interaction.user.id}`)
+        .setLabel('no_number_user')
+        .setStyle(ButtonStyle.Primary);
 
-    if (interaction.user.id !== ownerId) {
-      return await interaction.reply({ content: '❌ This menu is not for you! Run `/gen` to start your own.', ephemeral: true });
+      const btnYearUser = new ButtonBuilder()
+        .setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`)
+        .setLabel('year_user')
+        .setStyle(ButtonStyle.Success);
+
+      const btnDoubleUser = new ButtonBuilder()
+        .setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`)
+        .setLabel('double_user')
+        .setStyle(ButtonStyle.Danger);
+
+      const row = new ActionRowBuilder().addComponents(btnNoNumber, btnYearUser, btnDoubleUser);
+
+      await interaction.update({
+        content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`,
+        components: [row]
+      });
     }
 
-    const selectedYear = interaction.values[0];
+    // 3. Button Click & Generation
+    if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
+      const parts = interaction.customId.split('_');
+      const filterType = `${parts[1]}_${parts[2]}`;
+      const targetYear = parts[3];
+      const ownerId = parts[4];
 
-    const btnNoNumber = new ButtonBuilder()
-      .setCustomId(`gen_no_number_${selectedYear}_${interaction.user.id}`)
-      .setLabel('no_number_user')
-      .setStyle(ButtonStyle.Primary);
+      if (interaction.user.id !== ownerId) {
+        return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', flags: 64 });
+      }
 
-    const btnYearUser = new ButtonBuilder()
-      .setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`)
-      .setLabel('year_user')
-      .setStyle(ButtonStyle.Success);
+      cooldowns.set(interaction.user.id, Date.now());
+      await interaction.update({ content: '⚡ **Scanning Roblox network at maximum speed...**', components: [] });
 
-    const btnDoubleUser = new ButtonBuilder()
-      .setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`)
-      .setLabel('double_user')
-      .setStyle(ButtonStyle.Danger);
+      try {
+        const accountData = await ultraFastRobloxSearch(targetYear, filterType);
 
-    const row = new ActionRowBuilder().addComponents(btnNoNumber, btnYearUser, btnDoubleUser);
+        const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
+        userGenCount.set(interaction.user.id, currentCount);
 
-    await interaction.update({
-      content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`,
-      components: [row]
-    });
-  }
+        const embed = new EmbedBuilder()
+          .setTitle('🔑 Account Generation')
+          .setDescription('Your account name has been generated.')
+          .setThumbnail(accountData.avatarUrl)
+          .setColor('#00A2FF')
+          .addFields(
+            { name: '🌍 Selected Year', value: targetYear, inline: false },
+            { name: '🛠️ Selected Method', value: filterType, inline: false },
+            { name: '👤 Usage Count', value: currentCount.toString(), inline: false },
+            { name: '✅ Result', value: `Account name successfully generated:\n**${accountData.name}**`, inline: false },
+            { name: '📅 Account Created', value: accountData.createdDate, inline: false },
+            { name: '🚫 Banned?', value: accountData.isBanned ? 'Yes' : 'No', inline: false },
+            { name: '💰 RAP', value: accountData.rapValue, inline: false },
+            { name: '✅ Verified', value: accountData.isVerified ? 'Yes' : 'No', inline: false }
+          );
 
-  // 3. Button Click & Generation
-  if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
-    const parts = interaction.customId.split('_');
-    const filterType = `${parts[1]}_${parts[2]}`;
-    const targetYear = parts[3];
-    const ownerId = parts[4];
+        await interaction.user.send({ embeds: [embed] });
+        await interaction.deleteReply().catch(() => {});
 
-    if (interaction.user.id !== ownerId) {
-      return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', ephemeral: true });
+      } catch (error) {
+        console.error(error);
+        await interaction.followUp({ content: '❌ Could not send DM! Please make sure your DMs are open.', flags: 64 });
+      }
     }
-
-    cooldowns.set(interaction.user.id, Date.now());
-    await interaction.update({ content: '⚡ **Scanning Roblox network at maximum speed...**', components: [] });
-
-    try {
-      const accountData = await ultraFastRobloxSearch(targetYear, filterType);
-
-      const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
-      userGenCount.set(interaction.user.id, currentCount);
-
-      // Görseldeki Tasarımın Birebir Arayüzü
-      const embed = new EmbedBuilder()
-        .setTitle('🔑 Account Generation')
-        .setDescription('Your account name has been generated.')
-        .setThumbnail(accountData.avatarUrl)
-        .setColor('#00A2FF')
-        .addFields(
-          { name: '🌍 Selected Year', value: targetYear, inline: false },
-          { name: '🛠️ Selected Method', value: filterType, inline: false },
-          { name: '👤 Usage Count', value: currentCount.toString(), inline: false },
-          { name: '✅ Result', value: `Account name successfully generated:\n**${accountData.name}**`, inline: false },
-          { name: '📅 Account Created', value: accountData.createdDate, inline: false },
-          { name: '🚫 Banned?', value: accountData.isBanned ? 'Yes' : 'No', inline: false },
-          { name: '💰 RAP', value: accountData.rapValue, inline: false },
-          { name: '✅ Verified', value: accountData.isVerified ? 'Yes' : 'No', inline: false }
-        );
-
-      await interaction.user.send({ embeds: [embed] });
-      await interaction.deleteReply().catch(() => {});
-
-    } catch (error) {
-      console.error(error);
-      await interaction.followUp({ content: '❌ Could not send DM! Please make sure your DMs are open.', ephemeral: true });
-    }
+  } catch (err) {
+    console.error('Interaction error caught:', err);
   }
 });
 
@@ -186,7 +200,7 @@ async function ultraFastRobloxSearch(targetYear, filterType) {
 
     const promises = batch.map(async (userId) => {
       try {
-        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 1000 });
+        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 3000 });
         const data = res.data;
         const accountYear = new Date(data.created).getFullYear().toString();
 
@@ -235,7 +249,7 @@ async function ultraFastRobloxSearch(targetYear, filterType) {
 // RAP Scanner
 async function getRAPValue(userId) {
   try {
-    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 1000 });
+    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 3000 });
     const items = res.data.data || [];
     
     let totalRAP = 0;
@@ -252,11 +266,20 @@ async function getRAPValue(userId) {
 // Headshot Avatar URL Fetcher
 async function getAvatarUrl(userId) {
   try {
-    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 1000 });
+    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 3000 });
     return res.data.data[0]?.imageUrl || `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
   } catch {
     return `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
   }
 }
+
+// Global Process Crash Prevention
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err, origin) => {
+  console.error('Uncaught Exception caught:', err, 'origin:', origin);
+});
 
 client.login(TOKEN);
