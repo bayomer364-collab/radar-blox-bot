@@ -31,15 +31,12 @@ const client = new Client({
   ],
 });
 
-// TOKEN AND CLIENT ID
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = '1538484436272676954';
 
-// Memory Storage
 const userGenCount = new Map();
 const cooldowns = new Map();
 
-// Optimized Roblox User ID Ranges per Year
 const YEAR_ID_RANGES = {
   '2006': { min: 1, max: 20000 },
   '2007': { min: 20001, max: 200000 },
@@ -62,7 +59,6 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-// Client Ready Event
 client.once('clientReady', async () => {
   console.log(`${client.user.tag} is online and ready!`);
   try {
@@ -151,11 +147,17 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', flags: 64 });
       }
 
+      // Anında yanıt vererek 3 saniyelik zaman aşımını engelle
+      await interaction.deferUpdate();
       cooldowns.set(interaction.user.id, Date.now());
-      await interaction.update({ content: '⚡ **Scanning Roblox network at maximum speed...**', components: [] });
+      await interaction.editReply({ content: '⚡ **Scanning Roblox network at maximum speed...**', components: [] });
 
       try {
         const accountData = await ultraFastRobloxSearch(targetYear, filterType);
+
+        if (!accountData) {
+          return await interaction.followUp({ content: '❌ Could not find a matching account in time. Please try again!', flags: 64 });
+        }
 
         const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
         userGenCount.set(interaction.user.id, currentCount);
@@ -189,18 +191,21 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Ultra-Fast Parallel Search (30 Concurrent Requests)
+// Optimized Search with Max Attempts to Prevent Infinite Loops
 async function ultraFastRobloxSearch(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
+  let attempts = 0;
+  const maxAttempts = 10; // Maksimum 10 tur (300 istek) tara
 
-  while (true) {
-    const batch = Array.from({ length: 30 }, () => 
+  while (attempts < maxAttempts) {
+    attempts++;
+    const batch = Array.from({ length: 20 }, () => 
       Math.floor(Math.random() * (range.max - range.min + 1)) + range.min
     );
 
     const promises = batch.map(async (userId) => {
       try {
-        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 3000 });
+        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 2500 });
         const data = res.data;
         const accountYear = new Date(data.created).getFullYear().toString();
 
@@ -244,12 +249,13 @@ async function ultraFastRobloxSearch(targetYear, filterType) {
       };
     }
   }
+  return null;
 }
 
 // RAP Scanner
 async function getRAPValue(userId) {
   try {
-    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 3000 });
+    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 2500 });
     const items = res.data.data || [];
     
     let totalRAP = 0;
@@ -266,14 +272,13 @@ async function getRAPValue(userId) {
 // Headshot Avatar URL Fetcher
 async function getAvatarUrl(userId) {
   try {
-    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 3000 });
+    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 2500 });
     return res.data.data[0]?.imageUrl || `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
   } catch {
     return `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
   }
 }
 
-// Global Process Crash Prevention
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
