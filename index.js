@@ -1,16 +1,4 @@
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 10000;
-
-app.get('/', (req, res) => {
-  res.send('RadarBlox 7/24 Aktif!');
-});
-
-app.listen(port, () => {
-  console.log(`Port ${port} üzerinde web sunucusu başarıyla başlatıldı.`);
-});
-
-const { 
+Const { 
   Client, 
   GatewayIntentBits, 
   ActionRowBuilder, 
@@ -32,7 +20,7 @@ const client = new Client({
 });
 
 // TOKEN AND CLIENT ID
-const TOKEN = process.env.TOKEN || 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
+const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
 const CLIENT_ID = '1538484436272676954';
 
 // User Generation Counter Memory
@@ -172,77 +160,55 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Tekli Kullanıcı Kontrol Fonksiyonu
-async function checkSingleAccount(randomUserId, targetYear, filterType) {
-  try {
-    const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { timeout: 1500 });
-    const data = res.data;
-    const accountYear = new Date(data.created).getFullYear().toString();
-
-    if (accountYear !== targetYear) return null;
-
-    const username = data.name;
-
-    // 1. no_number_user: İsimde hiç rakam olmamalı
-    if (filterType === 'no_number' && /\d/.test(username)) return null;
-
-    // 2. year_user: İsmin herhangi bir yerinde 4 haneli yıl içeren sayı olmalı (örn: 1998, 2001)
-    if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) return null;
-
-    // 3. double_user: İsmin herhangi bir yerinde çiftli tekrarlayan dizi olmalı (örn: 9090, 1212, 5050)
-    if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) return null;
-
-    let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
-    try {
-      const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`, { timeout: 1500 });
-      if (thumbRes.data?.data?.[0]?.imageUrl) {
-        avatarUrl = thumbRes.data.data[0].imageUrl;
-      }
-    } catch (e) {}
-
-    const createdDate = new Date(data.created).toLocaleDateString('en-US');
-
-    return {
-      id: data.id,
-      name: data.name,
-      createdDate: createdDate,
-      isBanned: data.isBanned,
-      lastOnline: 'Hidden / Private',
-      inventoryInfo: 'Scanned (Public/Private)',
-      avatarUrl: avatarUrl
-    };
-  } catch (err) {
-    return null;
-  }
-}
-
-// Ultra Hızlı Paralel Arama Fonksiyonu
 async function findRobloxAccountUntilFound(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
-  const BATCH_SIZE = 10; // Aynı anda 10 farklı hesabı paralel sorgular
 
   while (true) {
-    const promises = [];
-    for (let i = 0; i < BATCH_SIZE; i++) {
-      const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-      promises.push(checkSingleAccount(randomUserId, targetYear, filterType));
-    }
+    const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
 
-    const results = await Promise.all(promises);
-    const validAccount = results.find(acc => acc !== null);
+    try {
+      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`);
+      const data = res.data;
+      const accountYear = new Date(data.created).getFullYear().toString();
 
-    if (validAccount) {
-      return validAccount;
+      if (accountYear !== targetYear) continue;
+
+      const username = data.name;
+
+      // 1. no_number_user: İsimde hiç rakam olmamalı
+      if (filterType === 'no_number' && /\d/.test(username)) continue;
+
+      // 2. year_user: İsmin herhangi bir yerinde 4 haneli yıl içeren sayı olmalı (örn: 1998, 2001)
+      if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) continue;
+
+      // 3. double_user: İsmin herhangi bir yerinde çiftli tekrarlayan dizi olmalı (örn: 9090, 1212, 5050)
+      if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
+
+      let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
+      try {
+        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`);
+        if (thumbRes.data.data[0]?.imageUrl) {
+          avatarUrl = thumbRes.data.data[0].imageUrl;
+        }
+      } catch (e) {}
+
+      const createdDate = new Date(data.created).toLocaleDateString('en-US');
+
+      return {
+        id: data.id,
+        name: data.name,
+        createdDate: createdDate,
+        isBanned: data.isBanned,
+        lastOnline: 'Hidden / Private',
+        inventoryInfo: 'Scanned (Public/Private)',
+        avatarUrl: avatarUrl
+      };
+
+    } catch (err) {
+      await new Promise(resolve => setTimeout(resolve, 20)); // Hızlı arama için 20ms bekleme
+      continue;
     }
   }
 }
-
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-});
 
 client.login(TOKEN);
