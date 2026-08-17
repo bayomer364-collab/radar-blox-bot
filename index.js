@@ -83,7 +83,7 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   
-  // --- 10 SANİYE SPAM ENGELİ & DEFER İŞLEMİ ---
+  // --- 10 SECONDS COOLDOWN & DEFER ---
   if (interaction.isChatInputCommand()) {
     const now = Date.now();
     const userCooldown = cooldowns.get(interaction.user.id);
@@ -98,21 +98,20 @@ client.on('interactionCreate', async (interaction) => {
 
     cooldowns.set(interaction.user.id, now);
     
-    // Herkese açık yanıt için ephemeral false yapıldı
     try {
       await interaction.deferReply({ ephemeral: false }).catch(() => {});
     } catch (err) {
-      console.error('Defer hatası:', err);
+      console.error('Defer error:', err);
     }
   } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
     try {
       await interaction.deferUpdate().catch(() => {});
     } catch (err) {
-      console.error('Defer hatası:', err);
+      console.error('Defer error:', err);
     }
   }
 
-  // --- /gen KOMUTU ---
+  // --- /gen COMMAND ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
@@ -128,7 +127,7 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // --- /bulk-gen KOMUTU ---
+  // --- /bulk-gen COMMAND ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') {
     if (!interaction.member.roles.cache.has(ROLE_ID)) {
       return await interaction.editReply({ content: '❌ You need the **Bulk-Gen Customer** role to use this command.' });
@@ -142,13 +141,12 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.editReply({ content: 'Select amount to generate:', components: [row] });
   }
 
-  // --- /bulk-gen Miktar Seçimi ---
+  // --- /bulk-gen Amount Selection ---
   if (interaction.isButton() && interaction.customId.startsWith('bulk_amt_')) {
     const parts = interaction.customId.split('_');
     const amount = parts[2];
     const ownerId = parts[3];
 
-    // YETKİSİZ TIKLAMA ENGELİ
     if (interaction.user.id !== ownerId) {
       return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
     }
@@ -167,13 +165,12 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // --- /bulk-gen Yıl Seçimi ---
+  // --- /bulk-gen Year Selection ---
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('bulk_year_')) {
     const parts = interaction.customId.split('_');
     const amount = parts[2];
     const ownerId = parts[3];
 
-    // YETKİSİZ TIKLAMA ENGELİ
     if (interaction.user.id !== ownerId) {
       return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
     }
@@ -188,7 +185,7 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row] });
   }
 
-  // --- /bulk-gen Hesap Çekme İşlemi ---
+  // --- /bulk-gen Account Generation Process ---
   if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
     const parts = interaction.customId.split('_');
     const filterType = `${parts[2]}_${parts[3]}`;
@@ -196,7 +193,6 @@ client.on('interactionCreate', async (interaction) => {
     const amount = parseInt(parts[5]);
     const ownerId = parts[6];
 
-    // YETKİSİZ TIKLAMA ENGELİ
     if (interaction.user.id !== ownerId) {
       return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
     }
@@ -206,7 +202,8 @@ client.on('interactionCreate', async (interaction) => {
     const stock = db[key] || [];
 
     if (stock.length < amount) {
-      return await interaction.editReply({ content: `❌ Yetersiz stok! Gerekli: ${amount}, Mevcut: ${stock.length}`, components: [] });
+      await interaction.deleteReply().catch(() => {});
+      return;
     }
 
     const generatedAccounts = [];
@@ -241,17 +238,16 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
       await interaction.user.send({ embeds: embeds });
-      await interaction.editReply({ content: `✅ ${amount} accounts generated and sent to your DMs!`, components: [] });
+      await interaction.deleteReply().catch(() => {});
     } catch (e) {
       await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
     }
   }
 
-  // --- /gen Yıl Seçimi ---
+  // --- /gen Year Selection ---
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
     const ownerId = interaction.customId.split('_')[2];
     
-    // YETKİSİZ TIKLAMA ENGELİ
     if (interaction.user.id !== ownerId) {
       return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
     }
@@ -266,14 +262,13 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.editReply({ content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`, components: [row] });
   }
 
-  // --- /gen Hesap Çekme İşlemi ---
+  // --- /gen Account Generation Process ---
   if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
     const parts = interaction.customId.split('_');
     const filterType = `${parts[1]}_${parts[2]}`;
     const targetYear = parts[3];
     const ownerId = parts[4];
 
-    // YETKİSİZ TIKLAMA ENGELİ
     if (interaction.user.id !== ownerId) {
       return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
     }
@@ -283,7 +278,8 @@ client.on('interactionCreate', async (interaction) => {
     const stock = db[key] || [];
 
     if (stock.length === 0) {
-      return await interaction.editReply({ content: '❌ Stok geçici olarak boş! Scraper yeni hesaplar arıyor, lütfen 10 saniye sonra tekrar deneyin.' });
+      await interaction.deleteReply().catch(() => {});
+      return;
     }
 
     const accountData = stock.shift();
@@ -313,13 +309,13 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
       await interaction.user.send({ embeds: [embed] });
-      await interaction.editReply({ content: '✅ Account generated! Check your DMs.' });
+      await interaction.deleteReply().catch(() => {});
     } catch (e) {
-      await interaction.editReply({ content: '❌ Please open your DMs!' });
+      await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
     }
   }
 });
 
 require('./generator.js');
 client.login(TOKEN);
-           
+      
