@@ -19,8 +19,7 @@ function getRandomDigits(len) {
   return res;
 }
 
-// Rastgele, okunabilir hece/harf jeneratörü (Hiçbir kelimeye bağlı değil, sonsuz kombinasyon)
-function generateRandomSyllableName(minLen = 4, maxLen = 7) {
+function generateRandomSyllableName(minLen = 3, maxLen = 6) {
   const len = Math.floor(Math.random() * (maxLen - minLen + 1)) + minLen;
   let name = '';
   for (let i = 0; i < len; i++) {
@@ -29,69 +28,124 @@ function generateRandomSyllableName(minLen = 4, maxLen = 7) {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-function generateAccount(year, filter) {
-  const randomId = Math.floor(10000000 + Math.random() * 89999999).toString();
-  let username = '';
+function createPossibleUsername(year, filter) {
   const baseName = generateRandomSyllableName();
 
-  // 1. Sadece Harflerden Oluşan İsimler (no_number_user)
   if (filter === 'no_number_user') {
-    const part2 = generateRandomSyllableName(3, 5);
-    username = `${baseName}${part2.toLowerCase()}`;
-  } 
-
-  // 2. Çift / Tekrarlayan Sayılı İsimler (double_user)
-  else if (filter === 'double_user') {
+    const part2 = generateRandomSyllableName(3, 4);
+    return `${baseName}${part2.toLowerCase()}`;
+  } else if (filter === 'double_user') {
     const num2 = getRandomDigits(2);
     const num3 = getRandomDigits(3);
-    const style = Math.floor(Math.random() * 5);
+    const style = Math.floor(Math.random() * 3);
+    if (style === 0) return `${baseName}${num2}${num2}`;
+    if (style === 1) return `${baseName}${num3}${num3}`;
+    return `${num2}${baseName.toLowerCase()}${num2}`;
+  } else if (filter === 'year_user') {
+    const style = Math.floor(Math.random() * 2);
+    if (style === 0) return `${baseName}${year}`;
+    return `${baseName.toLowerCase()}${year}${getRandomDigits(1)}`;
+  }
+  return `${baseName}${year}`;
+}
 
-    if (style === 0) username = `${baseName}${num2}${num2}`;           // örn: Hxvord9090
-    else if (style === 1) username = `${baseName}${num3}${num3}`;     // örn: Sedric121212
-    else if (style === 2) username = `${num2}${baseName.toLowerCase()}${num2}`; // örn: 12dani12
-    else if (style === 3) username = `${baseName}${num3}${baseName.toLowerCase()}`; // örn: Aiden123aiden
-    else username = `${num3}${baseName.toLowerCase()}${num3}`;        // örn: 123bob123
-  } 
+// HTTP İSTEKLERİ İÇİN YARDIMCI FONKSİYON
+function fetchJSON(url) {
+  return new Promise((resolve) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch (e) { resolve(null); }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
 
-  // 3. Seçilen Yıla Uygun İsimler (year_user)
-  else if (filter === 'year_user') {
-    const style = Math.floor(Math.random() * 4);
+// ROBLOX API SORGULAMA VE DOĞRULAMA
+async function checkAndSendAccount() {
+  const targetYear = getRandom(YEARS);
+  const filterType = getRandom(FILTERS);
+  const username = createPossibleUsername(targetYear, filterType);
 
-    if (style === 0) username = `${baseName}${year}`;                  // örn: Robloxvassel2012
-    else if (style === 1) username = `${baseName.toLowerCase()}${year}${getRandomDigits(2)}`; // örn: deer200131
-    else if (style === 2) username = `${baseName}${year}${year}`;      // örn: King19981998
-    else username = `${baseName}${year}${getRandomDigits(1)}`;        // örn: Halis20007
+  // 1. Roblox Users API'den Kullanıcı Adını Sorgula
+  const userSearch = await fetchJSON(`https://users.roblox.com/v1/usernames/users`, {
+    method: 'POST'
+  });
+
+  // POST isteği için https.request kullanımı
+  const postData = JSON.stringify({ usernames: [username], excludeBannedUsers: false });
+  
+  const options = {
+    hostname: 'users.roblox.com',
+    path: '/v1/usernames/users',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData),
+      'User-Agent': 'Mozilla/5.0'
+    }
+  };
+
+  const robloxUser = await new Promise((resolve) => {
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed && parsed.data && parsed.data.length > 0) {
+            resolve(parsed.data[0]);
+          } else {
+            resolve(null);
+          }
+        } catch (e) { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.write(postData);
+    req.end();
+  });
+
+  // HESAP ROBLOX'TA YOKSA İŞLEMİ İPTAL ET (STOĞA EKLEME)
+  if (!robloxUser || !robloxUser.id) {
+    return;
   }
 
-  // Roblox Profil / Avatar Görsel Linki
-  const avatarUrl = `https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png`;
+  // 2. Hesap Detaylarını Roblox'tan Çek
+  const userDetails = await fetchJSON(`https://users.roblox.com/v1/users/${robloxUser.id}`);
+  if (!userDetails) return;
 
-  return {
+  // Kayıt yılı eşleşmiyorsa stoğa alma
+  const createdDate = new Date(userDetails.created);
+  const accountYear = createdDate.getFullYear().toString();
+  if (accountYear !== targetYear) return;
+
+  // 3. Avatar Görselini Çek
+  const avatarData = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${robloxUser.id}&size=150x150&format=Png&isCircular=false`);
+  const avatarUrl = (avatarData && avatarData.data && avatarData.data[0]) ? avatarData.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
+
+  const payload = JSON.stringify({
     secret: WEBHOOK_SECRET,
-    targetYear: year,
-    filterType: filter,
+    targetYear: accountYear,
+    filterType: filterType,
     accountData: {
-      id: randomId,
-      name: username,
-      createdDate: `${year}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
-      isBanned: false,
-      lastOnline: 'Active',
+      id: robloxUser.id.toString(),
+      name: robloxUser.name,
+      createdDate: createdDate.toISOString().split('T')[0],
+      isBanned: userDetails.isBanned || false,
+      lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
       inventoryInfo: 'Public Inventory',
       avatarUrl: avatarUrl
     }
-  };
-}
+  });
 
-setInterval(() => {
-  const year = getRandom(YEARS);
-  const filter = getRandom(FILTERS);
-  const payload = JSON.stringify(generateAccount(year, filter));
-
-  const url = new URL(WEBHOOK_URL);
-  const options = {
-    hostname: url.hostname,
+  // 4. Webhook İle Sunucuya Gönder
+  const webhookUrl = new URL(WEBHOOK_URL);
+  const webhookOptions = {
+    hostname: webhookUrl.hostname,
     port: 443,
-    path: url.pathname,
+    path: webhookUrl.pathname,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -99,8 +153,16 @@ setInterval(() => {
     }
   };
 
-  const req = https.request(options, () => {});
+  const req = https.request(webhookOptions, () => {});
   req.on('error', () => {});
   req.write(payload);
   req.end();
+
+  console.log(`[GERÇEK HESAP BULUNDU] ${robloxUser.name} (${accountYear}) stoğa eklendi.`);
+}
+
+// Her 3 saniyede bir arama yap
+setInterval(() => {
+  checkAndSendAccount().catch(() => {});
 }, 3000);
+  
