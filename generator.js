@@ -132,4 +132,4 @@ async function scanRandomRobloxAccount() {
 // Her 1 saniyede bir tarama yapması için başlatıldı
 setInterval(() => {
   scanRandomRobloxAccount().catch((err) => console.error('[TARAMA HATA]:', err));
-}, 2500);
+}, 4000);
