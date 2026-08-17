@@ -1,29 +1,25 @@
 const https = require('https');
 
-console.log('[DEBUG] generator.js dosyası başarıyla yüklendi ve çalışıyor (Batch Mode)!');
+console.log('[DEBUG] generator.js başarıyla başlatıldı (Akıllı & Güvenli Tarama Modu)!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
 const YEAR_ID_RANGES = {
-  '2010': { min: 5000001, max: 13000000 },
-  '2011': { min: 13000001, max: 25000000 },
-  '2012': { min: 25000001, max: 40000000 },
-  '2013': { min: 40000001, max: 60000000 },
-  '2014': { min: 60000001, max: 80000000 },
-  '2015': { min: 80000001, max: 110000000 }
+  '2010': 5000001,
+  '2011': 13000001,
+  '2012': 25000001,
+  '2013': 40000001,
+  '2014': 60000001,
+  '2015': 80000001
 };
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
-const FILTERS = ['year_user', 'double_user'];
-
-function getRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+let currentIds = { ...YEAR_ID_RANGES };
 
 function fetchJSON(url) {
   return new Promise((resolve) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -36,49 +32,52 @@ function fetchJSON(url) {
   });
 }
 
-function validateUsernameByFilter(username, filterType) {
-  if (/_/.test(username)) return false;
+function validateUsernameByFilter(username) {
+  if (/_/.test(username)) return null;
 
-  if (filterType === 'year_user') {
-    return /(19\d{2}|20\d{2})/.test(username);
+  if (/(19\d{2}|20\d{2})/.test(username)) {
+    return 'year_user';
   }
-  if (filterType === 'double_user') {
-    return /(\d{2})\1/.test(username);
+  if (/(\d{2})\1/.test(username)) {
+    return 'double_user';
   }
 
-  return false;
+  return null;
 }
 
-async function checkSingleAccount() {
-  const targetYear = getRandom(YEARS);
-  const targetFilter = getRandom(FILTERS);
+async function scanNext() {
+  // Her adımda rastgele bir yıl seçerek isteklerin doğal görünmesini sağla
+  const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
+  const testId = currentIds[targetYear];
+  currentIds[targetYear]++; // Sıradaki ID'ye geç
 
-  const range = YEAR_ID_RANGES[targetYear];
-  const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-
-  const res = await fetchJSON(`https://users.roblox.com/v1/users/${randomUserId}`);
+  const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
   
+  // Rate limit (429) kontrolü
   if (res.status === 429) {
-    return; // Rate limit durumunda sessizce geç
+    console.log('[WARNING] Rate limit (429) algılandı, biraz bekleniyor...');
+    return 5000; // 5 saniye mola ver
   }
 
-  if (!res.data || !res.data.name) return;
+  if (!res.data || !res.data.name) return 1500; // Hesap yoksa normal hızda devam et
 
   const userDetails = res.data;
   const createdDate = new Date(userDetails.created);
   const accountYear = createdDate.getFullYear().toString();
-  if (accountYear !== targetYear) return;
+  
+  if (accountYear !== targetYear) return 1500;
 
   const username = userDetails.name;
-  if (!validateUsernameByFilter(username, targetFilter)) return;
+  const matchedFilter = validateUsernameByFilter(username);
+  if (!matchedFilter) return 1500;
 
-  const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${randomUserId}&size=150x150&format=Png&isCircular=false`);
+  const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
   const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
   const payload = JSON.stringify({
     secret: WEBHOOK_SECRET,
     targetYear: accountYear,
-    filterType: targetFilter,
+    filterType: matchedFilter,
     accountData: {
       id: userDetails.id.toString(),
       name: username,
@@ -114,18 +113,24 @@ async function checkSingleAccount() {
   req.write(payload);
   req.end();
 
-  console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${targetFilter}`);
+  console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${matchedFilter} [ID: ${testId}]`);
+  return 1500;
 }
 
-// Her döngüde aynı anda 3 farklı istek atarak tarama hızını katlar
-setInterval(async () => {
-  try {
-    await Promise.all([
-      checkSingleAccount(),
-      checkSingleAccount(),
-      checkSingleAccount()
-    ]);
-  } catch (err) {
-    console.error('[BATCH SCAN ERROR]:', err);
+// Akıllı Döngü (İstekler arası dinamik ve güvenli bekleme süresi)
+async function startLoop() {
+  while (true) {
+    try {
+      const delay = await scanNext();
+      // İstekler arasına bot korumasını atlatmak için rastgele milisaniye ekle (1.5 - 3 saniye arası)
+      const randomJitter = Math.floor(Math.random() * 1500) + 1500;
+      await new Promise(resolve => setTimeout(resolve, delay || randomJitter));
+    } catch (err) {
+      console.error('[SCAN LOOP ERROR]:', err);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
   }
-}, 2000);
+}
+
+startLoop();
+  
