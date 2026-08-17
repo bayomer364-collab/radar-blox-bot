@@ -37,64 +37,13 @@ const CLIENT_ID = '1538484436272676954';
 const userGenCount = new Map();
 const cooldowns = new Map();
 
-// On-demand Instant Database (Anında Veri Veren Hesap Havuzu)
-const ACCOUNT_DATABASE = {
-  '2006': {
-    'no_number': ['Roblox', 'Erik', 'Builderman', 'Clockwork', 'Shedletsky', 'Telamon', 'Matt Dusek', 'Stickmasterluke'],
-    'year_user': ['Roblox2006', 'Player2006', 'Builderman06', 'Admin2006', 'Guest2006'],
-    'double_user': ['Cool11', 'Fast22', 'Dark33', 'Pro44', 'Master55']
-  },
-  '2007': {
-    'no_number': ['Miked', 'NobleDragon', 'Reef', 'Are17', 'Solaris', 'Shadow', 'Dragon', 'Viper'],
-    'year_user': ['Gamer2007', 'Roblox2007', 'Ninja2007', 'Shadow2007', 'Player2007'],
-    'double_user': ['Shadow11', 'Dragon22', 'Ninja33', 'Knight44', 'King55']
-  },
-  '2008': {
-    'no_number': ['Dignity', 'Frost', 'Blaze', 'Storm', 'Thunder', 'Ghost', 'Phantom', 'Specter'],
-    'year_user': ['Pro2008', 'Gamer2008', 'Master2008', 'Legend2008', 'Hero2008'],
-    'double_user': ['Ghost11', 'Blaze22', 'Storm33', 'Viper44', 'Frost55']
-  },
-  '2009': {
-    'no_number': ['Sonic', 'Shadow', 'Knuckles', 'Tails', 'Mario', 'Luigi', 'Yoshi', 'Bowser'],
-    'year_user': ['Sonic2009', 'Mario2009', 'Luigi2009', 'Shadow2009', 'Gamer2009'],
-    'double_user': ['Sonic11', 'Mario22', 'Luigi33', 'Yoshi44', 'Bowser55']
-  },
-  '2010': {
-    'no_number': ['Creeper', 'Steve', 'Alex', 'Enderman', 'Herobrine', 'Notch', 'Zombie', 'Skeleton'],
-    'year_user': ['Steve2010', 'Alex2010', 'Creeper2010', 'Notch2010', 'Gamer2010'],
-    'double_user': ['Steve11', 'Alex22', 'Creeper33', 'Notch44', 'Zombie55']
-  },
-  '2011': {
-    'no_number': ['Skydoes', 'Deadlox', 'Jerome', 'Bajan', 'Husky', 'Merome', 'Minecraft', 'Craft'],
-    'year_user': ['Craft2011', 'Build2011', 'Mine2011', 'Block2011', 'Gamer2011'],
-    'double_user': ['Craft11', 'Build22', 'Mine33', 'Block44', 'Gamer55']
-  },
-  '2012': {
-    'no_number': ['DanTDM', 'Thinknoodles', 'Thnk', 'Stampy', 'Ballistic', 'IBallistic', 'Squid', 'Lzee'],
-    'year_user': ['Dan2012', 'Stampy2012', 'Squid2012', 'Hero2012', 'Gamer2012'],
-    'double_user': ['Dan11', 'Stampy22', 'Squid33', 'Hero44', 'Gamer55']
-  },
-  '2013': {
-    'no_number': ['Denis', 'Sub', 'Alex', 'Corl', 'Ethan', 'Sketch', 'Bandi', 'Inquisitor'],
-    'year_user': ['Denis2013', 'Sub2013', 'Alex2013', 'Corl2013', 'Sketch2013'],
-    'double_user': ['Denis11', 'Sub22', 'Alex33', 'Corl44', 'Sketch55']
-  },
-  '2014': {
-    'no_number': ['Poke', 'Tofuu', 'Oblivious', 'Kestrel', 'Valkyrie', 'Dominus', 'Sparkle', 'Fiery'],
-    'year_user': ['Poke2014', 'Tofu2014', 'Valk2014', 'Dom2014', 'Gamer2014'],
-    'double_user': ['Poke11', 'Tofu22', 'Valk33', 'Dom44', 'Gamer55']
-  },
-  '2015': {
-    'no_number': ['Flamingo', 'Albert', 'Jake', 'Jayingee', 'Kaden', 'Lamber', 'Koneko', 'Kitten'],
-    'year_user': ['Albert2015', 'Jake2015', 'Kaden2015', 'Koneko2015', 'Gamer2015'],
-    'double_user': ['Albert11', 'Jake22', 'Kaden33', 'Koneko44', 'Gamer55']
-  },
-  '2016': {
-    'no_number': ['KreekCraft', 'TanqR', 'Russo', 'Lazer', 'Lethal', 'Cyber', 'Matrix', 'Nexus'],
-    'year_user': ['Kreek2016', 'TanqR2016', 'Russo2016', 'Cyber2016', 'Nexus2016'],
-    'double_user': ['Kreek11', 'Tanq22', 'Russo33', 'Cyber44', 'Nexus55']
-  }
-};
+// Egzotik ve Çeşitli Kelime / İsim Havuzu
+const BASE_NAMES = [
+  'andrew', 'anton', 'alex', 'shadow', 'viper', 'dragon', 'ghost', 'phantom',
+  'blaze', 'storm', 'frost', 'knight', 'legend', 'master', 'nexus', 'cyber',
+  'matrix', 'kestrel', 'valkyrie', 'dominus', 'sparkle', 'noble', 'solar',
+  'lunar', 'zenith', 'vortex', 'specter', 'titan', 'reaper', 'hunter', 'rogue'
+];
 
 const commands = [
   new SlashCommandBuilder()
@@ -119,7 +68,7 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
       const lastUsed = cooldowns.get(interaction.user.id);
       const now = Date.now();
-      const cooldownAmount = 5 * 1000;
+      const cooldownAmount = 3 * 1000;
 
       if (lastUsed && (now - lastUsed < cooldownAmount)) {
         const timeLeft = ((cooldownAmount - (now - lastUsed)) / 1000).toFixed(1);
@@ -192,13 +141,8 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferUpdate();
       cooldowns.set(interaction.user.id, Date.now());
 
-      // Veri tabanından doğrudan ve anında çek
-      const yearData = ACCOUNT_DATABASE[targetYear] || ACCOUNT_DATABASE['2010'];
-      const pool = yearData[filterType] || yearData['no_number'];
-      const randomUsername = pool[Math.floor(Math.random() * pool.length)];
-
-      // Sadece profil bilgilerini hızlıca çek
-      let accountInfo = await fetchRobloxUserInfo(randomUsername, targetYear);
+      const generatedUsername = generateExoticName(filterType, targetYear);
+      const accountInfo = await fetchRobloxUserInfo(generatedUsername, targetYear);
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
@@ -227,7 +171,40 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Anında Bilgi Getirici
+// Egzotik İsim Üretici Algoritma
+function generateExoticName(filterType, year) {
+  const baseName = BASE_NAMES[Math.floor(Math.random() * BASE_NAMES.length)];
+
+  if (filterType === 'no_number') {
+    return baseName;
+  }
+
+  if (filterType === 'year_user') {
+    const patterns = [
+      `${baseName}${year}${Math.floor(Math.random() * 90 + 10)}`, // andrew199831
+      `${year}${baseName}`,                                      // 2001andrew
+      `${baseName}${year}${year}`                                // andrew19981998
+    ];
+    return patterns[Math.floor(Math.random() * patterns.length)];
+  }
+
+  if (filterType === 'double_user') {
+    const doubleDigits = ['909090', '5050', '1212', '8080', '7070', '3030', '1122'];
+    const selectedDouble = doubleDigits[Math.floor(Math.random() * doubleDigits.length)];
+
+    const patterns = [
+      `${baseName}${selectedDouble}`,                            // anton909090
+      `${selectedDouble}${baseName}${selectedDouble}`,          // 5050anton5050
+      `${baseName}${selectedDouble.slice(0, 4)}`,                // anton1212
+      `${selectedDouble.slice(0, 4)}${baseName}`                 // 8080anton
+    ];
+    return patterns[Math.floor(Math.random() * patterns.length)];
+  }
+
+  return `${baseName}${year}`;
+}
+
+// Roblox Kullanıcı Bilgisi Çekici
 async function fetchRobloxUserInfo(username, fallbackYear) {
   try {
     const res = await axios.post('https://users.roblox.com/v1/usernames/users', {
@@ -238,7 +215,7 @@ async function fetchRobloxUserInfo(username, fallbackYear) {
     if (res.data && res.data.data && res.data.data.length > 0) {
       const user = res.data.data[0];
       const userDetail = await axios.get(`https://users.roblox.com/v1/users/${user.id}`, { timeout: 3000 });
-      
+
       const formattedDate = new Date(userDetail.data.created).toLocaleDateString('en-US', {
         month: 'long',
         day: 'numeric',
@@ -256,13 +233,13 @@ async function fetchRobloxUserInfo(username, fallbackYear) {
       };
     }
   } catch (e) {
-    // Hata durumunda dahi bot takılmasın
+    // Hata durumunda güvenli yedek
   }
 
   return {
     id: '123456',
     name: username,
-    createdDate: `January 1, ${fallbackYear}`,
+    createdDate: `January 15, ${fallbackYear}`,
     isBanned: false,
     isVerified: false,
     rapValue: '0',
