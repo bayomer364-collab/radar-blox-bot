@@ -1,4 +1,4 @@
-Const { 
+const { 
   Client, 
   GatewayIntentBits, 
   ActionRowBuilder, 
@@ -142,7 +142,7 @@ client.on('interactionCreate', async (interaction) => {
         .addFields(
           { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
           { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
+          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned / Inactive' : '✅ Active', inline: true },
           { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
           { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
         )
@@ -184,11 +184,34 @@ async function findRobloxAccountUntilFound(targetYear, filterType) {
       // 3. double_user: İsmin herhangi bir yerinde çiftli tekrarlayan dizi olmalı (örn: 9090, 1212, 5050)
       if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
 
+      // Avatar Thumbnail Alma
       let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
       try {
         const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`);
         if (thumbRes.data.data[0]?.imageUrl) {
           avatarUrl = thumbRes.data.data[0].imageUrl;
+        }
+      } catch (e) {}
+
+      // Last Online (Presence API) Çekme
+      let lastOnline = 'Hidden / Offline';
+      try {
+        const presenceRes = await axios.post('https://presence.roblox.com/v1/presence/users', {
+          userIds: [data.id]
+        });
+        const userPresence = presenceRes.data.userPresences[0];
+        if (userPresence && userPresence.lastOnline) {
+          const dateObj = new Date(userPresence.lastOnline);
+          lastOnline = dateObj.toLocaleDateString('en-US');
+        }
+      } catch (e) {}
+
+      // Inventory Access (Envanter Gizlilik) Kontrolü
+      let inventoryInfo = 'Private';
+      try {
+        const invRes = await axios.get(`https://inventory.roblox.com/v1/users/${data.id}/can-view-inventory`);
+        if (invRes.data && invRes.data.canView === true) {
+          inventoryInfo = 'Public';
         }
       } catch (e) {}
 
@@ -198,9 +221,9 @@ async function findRobloxAccountUntilFound(targetYear, filterType) {
         id: data.id,
         name: data.name,
         createdDate: createdDate,
-        isBanned: data.isBanned,
-        lastOnline: 'Hidden / Private',
-        inventoryInfo: 'Scanned (Public/Private)',
+        isBanned: data.isBanned || false,
+        lastOnline: lastOnline,
+        inventoryInfo: inventoryInfo,
         avatarUrl: avatarUrl
       };
 
