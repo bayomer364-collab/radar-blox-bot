@@ -128,7 +128,7 @@ async function startLoop() {
       await new Promise(resolve => setTimeout(resolve, delay));
     } catch (err) {
       console.error('[SCAN LOOP ERROR]:', err);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 3500));
     }
   }
 }
