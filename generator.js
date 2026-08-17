@@ -3,7 +3,6 @@ const https = require('https');
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
-// Roblox Yıllara Göre Doğru ID Aralıkları
 const YEAR_ID_RANGES = {
   '2006': { min: 1, max: 20000 },
   '2007': { min: 20001, max: 200000 },
@@ -21,7 +20,6 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 const FILTERS = ['no_number_user', 'year_user', 'double_user'];
 
-// Eşit dağılımı sağlamak için sıra takip değişkeni
 let filterIndex = 0;
 
 function getRandom(arr) {
@@ -30,31 +28,26 @@ function getRandom(arr) {
 
 function fetchJSON(url) {
   return new Promise((resolve) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch (e) { resolve(null); }
+        try { resolve({ status: res.statusCode, data: JSON.parse(data) }); } 
+        catch (e) { resolve({ status: res.statusCode, data: null }); }
       });
-    }).on('error', () => resolve(null));
+    }).on('error', () => resolve({ status: 500, data: null }));
   });
 }
 
 function validateUsernameByFilter(username, filterType) {
-  // Kesin kural: Alt çizgi (_) olmayacak
   if (/_/.test(username)) return false;
 
-  // 1. no_number_user: İsimde hiç rakam olmamalı
   if (filterType === 'no_number_user') {
     return !/\d/.test(username);
   }
-
-  // 2. year_user: İsmin herhangi bir yerinde 4 haneli yıl olmalı (örn: 1998, 2001, 2012)
   if (filterType === 'year_user') {
     return /(19\d{2}|20\d{2})/.test(username);
   }
-
-  // 3. double_user: Çiftli tekrarlayan dizi olmalı (örn: 9090, 1212, 5050)
   if (filterType === 'double_user') {
     return /(\d{2})\1/.test(username);
   }
@@ -64,27 +57,31 @@ function validateUsernameByFilter(username, filterType) {
 
 async function scanRandomRobloxAccount() {
   const targetYear = getRandom(YEARS);
-  
-  // Filtreleri sırayla seç (Eşit 3'e bölme mantığı)
   const targetFilter = FILTERS[filterIndex];
-  filterIndex = (filterIndex + 1) % FILTERS.length; // 0, 1, 2 -> 0, 1, 2 şeklinde döner
+  filterIndex = (filterIndex + 1) % FILTERS.length;
 
   const range = YEAR_ID_RANGES[targetYear];
   const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
 
-  const userDetails = await fetchJSON(`https://users.roblox.com/v1/users/${randomUserId}`);
-  if (!userDetails || !userDetails.name) return;
+  const res = await fetchJSON(`https://users.roblox.com/v1/users/${randomUserId}`);
+  
+  if (res.status === 429) {
+    console.log('[RATE LIMIT] Roblox istek limiti aşıldı, bekleniyor...');
+    return;
+  }
 
+  if (!res.data || !res.data.name) return;
+
+  const userDetails = res.data;
   const createdDate = new Date(userDetails.created);
   const accountYear = createdDate.getFullYear().toString();
   if (accountYear !== targetYear) return;
 
   const username = userDetails.name;
-
   if (!validateUsernameByFilter(username, targetFilter)) return;
 
-  const avatarData = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${randomUserId}&size=150x150&format=Png&isCircular=false`);
-  const avatarUrl = (avatarData && avatarData.data && avatarData.data[0]) ? avatarData.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
+  const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${randomUserId}&size=150x150&format=Png&isCircular=false`);
+  const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
   const payload = JSON.stringify({
     secret: WEBHOOK_SECRET,
@@ -114,15 +111,14 @@ async function scanRandomRobloxAccount() {
   };
 
   const req = https.request(webhookOptions, () => {});
-  req.on('error', () => {});
+  req.on('error', (err) => console.error('Webhook gönderme hatası:', err.message));
   req.write(payload);
   req.end();
 
   console.log(`[GERÇEK HESAP BULUNDU] ${username} (${accountYear}) - Filtre: ${targetFilter}`);
 }
 
-// 100ms aralıklarla sırayla filtre taraması yapar
+// Güvenli tarama aralığı: 1000ms (1 saniye)
 setInterval(() => {
   scanRandomRobloxAccount().catch(() => {});
-}, 100);
-    
+}, 1000);
