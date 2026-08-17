@@ -187,19 +187,22 @@ client.on('interactionCreate', async (interaction) => {
     userGenCount.set(interaction.user.id, currentCount);
 
     const embeds = generatedAccounts.map((accountData, index) => {
+      const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Public';
+      const statusText = accountData.isBanned ? '🔴 Banned' : '🟢 Active';
+      
       return new EmbedBuilder()
-        .setTitle(`✨ BULK ACCOUNT #${index + 1}`)
+        .setTitle(`👑 BULK PREMIUM ACCOUNT #${index + 1}`)
         .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
-        .setColor('#2B2D31')
+        .setColor('#2F3136')
         .setThumbnail(accountData.avatarUrl)
         .addFields(
-          { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
+          { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
           { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
-          { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
-          { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+          { name: '🛡️ Status', value: statusText, inline: true },
+          { name: '🌐 Last Activity', value: `\`${accountData.lastOnline || 'Offline'}\``, inline: true },
+          { name: '🎒 Inventory', value: `\`${isPublic}\``, inline: false }
         )
-        .setFooter({ text: `RadarBlox Bulk Generator • Total Generations by you: ${currentCount}` })
+        .setFooter({ text: `RadarBlox Premium Bulk • Total Generations: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
     });
 
@@ -250,7 +253,36 @@ client.on('interactionCreate', async (interaction) => {
     const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
     userGenCount.set(interaction.user.id, currentCount);
 
+    const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Public';
+    const statusText = accountData.isBanned ? '🔴 Banned' : '🟢 Active';
+
     const embed = new EmbedBuilder()
+      .setTitle(`👑 RADARBLOX PREMIUM ACCOUNT GENERATED`)
+      .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+      .setColor('#2F3136')
+      .setThumbnail(accountData.avatarUrl)
+      .addFields(
+        { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
+        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+        { name: '🛡️ Status', value: statusText, inline: true },
+        { name: '🌐 Last Activity', value: `\`${accountData.lastOnline || 'Offline'}\``, inline: true },
+        { name: '🎒 Inventory', value: `\`${isPublic}\``, inline: false }
+      )
+      .setFooter({ text: `RadarBlox Premium • Total Generations by you: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
+      .setTimestamp();
+
+    try {
+      await interaction.user.send({ embeds: [embed] });
+      await interaction.editReply({ content: '✅ Account generated! Check your DMs.' });
+    } catch (e) {
+      await interaction.editReply({ content: '❌ Please open your DMs!' });
+    }
+  }
+});
+
+require('./generator.js');
+client.login(TOKEN);
+ilder()
       .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
       .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
       .setColor('#2B2D31')
