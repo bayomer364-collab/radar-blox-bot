@@ -24,7 +24,7 @@ const ROLE_ID = '1538940771967700992';
 
 const userGenCount = new Map();
 
-// Spam Engeli için Cooldown Map (10 Saniye)
+// Spam Protection Cooldown Map (10 Seconds)
 const cooldowns = new Map();
 const COOLDOWN_TIME = 10 * 1000;
 
@@ -37,7 +37,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// 1. EXPRESS WEBHOOK SUNUCUSU
+// 1. EXPRESS WEBHOOK SERVER
 const app = express();
 app.use(express.json());
 
@@ -55,7 +55,7 @@ app.post('/api/add-account', (req, res) => {
   if (!db[key].some(acc => acc.id === accountData.id)) {
     db[key].push(accountData);
     saveDB(db);
-    console.log(`[WEBHOOK ALINDI] ${key} katmanına hesap eklendi. Toplam: ${db[key].length}`);
+    console.log(`[WEBHOOK RECEIVED] Account added to layer ${key}. Total: ${db[key].length}`);
   }
 
   return res.json({ success: true, stockCount: db[key].length });
@@ -64,7 +64,7 @@ app.post('/api/add-account', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Webhook server listening on port ${PORT}`));
 
-// 2. DISCORD BOT KOMUTLARI
+// 2. DISCORD BOT COMMANDS
 const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Starts the RadarBlox generator.'),
   new SlashCommandBuilder().setName('bulk-gen').setDescription('Generate multiple accounts.')
@@ -75,9 +75,9 @@ client.once('ready', async () => {
   try {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log('Komutlar başarıyla yüklendi.');
+    console.log('Commands successfully loaded.');
   } catch (error) {
-    console.error('Komut yükleme hatası:', error);
+    console.error('Command loading error:', error);
   }
 });
 
@@ -111,13 +111,13 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
-  // --- /gen COMMAND ---
+  // --- /gen COMMAND (2010 - 2015 arası) ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
-      .setPlaceholder('Select Account Creation Year (2006 - 2016)')
-      .addOptions(Array.from({ length: 11 }, (_, i) => {
-        const year = (2006 + i).toString();
+      .setPlaceholder('Select Account Creation Year (2010 - 2015)')
+      .addOptions(Array.from({ length: 6 }, (_, i) => {
+        const year = (2010 + i).toString();
         return { label: year, value: year, description: `Accounts created in ${year}` };
       }));
 
@@ -127,7 +127,7 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // --- /bulk-gen COMMAND ---
+  // --- /bulk-gen COMMAND (2010 - 2015 arası) ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') {
     if (!interaction.member.roles.cache.has(ROLE_ID)) {
       return await interaction.editReply({ content: '❌ You need the **Bulk-Gen Customer** role to use this command.' });
@@ -153,9 +153,9 @@ client.on('interactionCreate', async (interaction) => {
 
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`bulk_year_${amount}_${interaction.user.id}`)
-      .setPlaceholder('Select Account Creation Year (2006 - 2016)')
-      .addOptions(Array.from({ length: 11 }, (_, i) => {
-        const year = (2006 + i).toString();
+      .setPlaceholder('Select Account Creation Year (2010 - 2015)')
+      .addOptions(Array.from({ length: 6 }, (_, i) => {
+        const year = (2010 + i).toString();
         return { label: year, value: year, description: `Accounts created in ${year}` };
       }));
 
@@ -318,4 +318,4 @@ client.on('interactionCreate', async (interaction) => {
 
 require('./generator.js');
 client.login(TOKEN);
-      
+  
