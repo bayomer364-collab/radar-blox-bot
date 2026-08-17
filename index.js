@@ -37,13 +37,14 @@ const CLIENT_ID = '1538484436272676954';
 const userGenCount = new Map();
 const cooldowns = new Map();
 
-// Genişletilmiş İsim / Kelime Havuzu
+// Genişletilmiş Kelime ve Kök Havuzu
 const BASE_NAMES = [
   'andrew', 'anton', 'alex', 'shadow', 'viper', 'dragon', 'ghost', 'phantom',
   'blaze', 'storm', 'frost', 'knight', 'legend', 'master', 'nexus', 'cyber',
   'matrix', 'kestrel', 'valkyrie', 'dominus', 'sparkle', 'noble', 'solar',
   'lunar', 'zenith', 'vortex', 'specter', 'titan', 'reaper', 'hunter', 'rogue',
-  'hero', 'sketch', 'stampy', 'denis', 'build', 'dan', 'mike', 'john', 'chris'
+  'hero', 'sketch', 'stampy', 'denis', 'build', 'dan', 'mike', 'john', 'chris',
+  'bloxxer', 'slayer', 'kral', 'darknes', 'zard', 'krip', 'vond', 'xX_shadow_Xx'
 ];
 
 const commands = [
@@ -107,17 +108,17 @@ client.on('interactionCreate', async (interaction) => {
       const selectedYear = interaction.values[0];
 
       const btnNoNumber = new ButtonBuilder()
-        .setCustomId(`gen_no_number_${selectedYear}_${interaction.user.id}`)
+        .setCustomId(`gen_nonumber_${selectedYear}_${interaction.user.id}`)
         .setLabel('no_number_user')
         .setStyle(ButtonStyle.Primary);
 
       const btnYearUser = new ButtonBuilder()
-        .setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`)
+        .setCustomId(`gen_yearuser_${selectedYear}_${interaction.user.id}`)
         .setLabel('year_user')
         .setStyle(ButtonStyle.Success);
 
       const btnDoubleUser = new ButtonBuilder()
-        .setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`)
+        .setCustomId(`gen_doubleuser_${selectedYear}_${interaction.user.id}`)
         .setLabel('double_user')
         .setStyle(ButtonStyle.Danger);
 
@@ -131,9 +132,9 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
-      const filterType = `${parts[1]}_${parts[2]}`;
-      const targetYear = parts[3];
-      const ownerId = parts[4];
+      const filterType = parts[1]; // nonumber, yearuser, doubleuser
+      const targetYear = parts[2];
+      const ownerId = parts[3];
 
       if (interaction.user.id !== ownerId) {
         return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', flags: 64 });
@@ -142,7 +143,6 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferUpdate();
       cooldowns.set(interaction.user.id, Date.now());
 
-      // Sadece GERÇEK ve Doğru Yıl Olan Hesabı Bulma Döngüsü
       const accountInfo = await findValidRobloxAccount(filterType, targetYear);
 
       if (!accountInfo) {
@@ -152,8 +152,11 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.deleteReply().catch(() => {});
       }
 
+      // Usage Count Güncelleme (Sayaç)
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
+
+      const displayFilterName = filterType === 'nonumber' ? 'no_number_user' : (filterType === 'yearuser' ? 'year_user' : 'double_user');
 
       const embed = new EmbedBuilder()
         .setTitle('🔑 Account Generation')
@@ -162,7 +165,7 @@ client.on('interactionCreate', async (interaction) => {
         .setColor('#00A2FF')
         .addFields(
           { name: '🌍 Selected Year', value: targetYear, inline: false },
-          { name: '🛠️ Selected Method', value: filterType, inline: false },
+          { name: '🛠️ Selected Method', value: displayFilterName, inline: false },
           { name: '👤 Usage Count', value: currentCount.toString(), inline: false },
           { name: '✅ Result', value: `Account name successfully generated:\n**${accountInfo.name}**`, inline: false },
           { name: '📅 Account Created', value: accountInfo.createdDate, inline: false },
@@ -179,81 +182,85 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// İsim Formatlandırma
-function generateExoticName(filterType, year) {
+// Egzotik Kalıp Üreticisi
+function generateSearchQuery(filterType) {
   const baseName = BASE_NAMES[Math.floor(Math.random() * BASE_NAMES.length)];
 
-  if (filterType === 'no_number') {
+  if (filterType === 'nonumber') {
     return baseName;
   }
 
-  if (filterType === 'year_user') {
+  if (filterType === 'yearuser') {
+    const randomYear = Math.floor(Math.random() * (2016 - 1995 + 1)) + 1995;
+    const randomSuffix = Math.floor(Math.random() * 90 + 10);
     const patterns = [
-      `${baseName}${year}`,
-      `${baseName}${year}${Math.floor(Math.random() * 90 + 10)}`,
-      `${year}${baseName}`,
-      `${baseName}${year}${year}`
+      `${baseName}${randomYear}`,
+      `${baseName}${randomYear}${randomSuffix}`,
+      `${randomYear}${baseName}`,
+      `${baseName}${randomYear}${randomYear}`
     ];
     return patterns[Math.floor(Math.random() * patterns.length)];
   }
 
-  if (filterType === 'double_user') {
-    const doubleDigits = ['909090', '5050', '1212', '8080', '7070', '3030', '1122', '44', '55', '66', '77', '88', '99'];
-    const selectedDouble = doubleDigits[Math.floor(Math.random() * doubleDigits.length)];
+  if (filterType === 'doubleuser') {
+    const doubleUnits = ['909090', '5050', '1212', '8080', '7070', '3030', '1122', '4444', '5555', '8888', '9999'];
+    const chosenDouble = doubleUnits[Math.floor(Math.random() * doubleUnits.length)];
 
     const patterns = [
-      `${baseName}${selectedDouble}`,
-      `${selectedDouble}${baseName}${selectedDouble}`,
-      `${baseName}${selectedDouble.slice(0, 4)}`,
-      `${selectedDouble.slice(0, 4)}${baseName}`
+      `${baseName}${chosenDouble}`,
+      `${chosenDouble}${baseName}${chosenDouble}`,
+      `${baseName}${chosenDouble.slice(0, 4)}`,
+      `${chosenDouble.slice(0, 4)}${baseName}`
     ];
     return patterns[Math.floor(Math.random() * patterns.length)];
   }
 
-  return `${baseName}${year}`;
+  return baseName;
 }
 
-// Gerçek Hesap Arama Döngüsü
+// Akıllı & Gerçek Hesap Arama Döngüsü
 async function findValidRobloxAccount(filterType, targetYear) {
-  const maxAttempts = 20;
+  const maxAttempts = 15;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const candidateName = generateExoticName(filterType, targetYear);
-    
+    const searchQuery = generateSearchQuery(filterType);
+
     try {
-      const res = await axios.post('https://users.roblox.com/v1/usernames/users', {
-        usernames: [candidateName],
-        excludeBannedUsers: false
-      }, { timeout: 2500 });
+      // Roblox Arama API'si üzerinden arama yap
+      const searchRes = await axios.get(`https://users.roblox.com/v1/users/search?keyword=${encodeURIComponent(searchQuery)}&limit=10`, { timeout: 2500 });
+      
+      if (searchRes.data && searchRes.data.data && searchRes.data.data.length > 0) {
+        const candidates = searchRes.data.data;
 
-      if (res.data && res.data.data && res.data.data.length > 0) {
-        const user = res.data.data[0];
-        const userDetail = await axios.get(`https://users.roblox.com/v1/users/${user.id}`, { timeout: 2500 });
+        for (const candidate of candidates) {
+          const userDetail = await axios.get(`https://users.roblox.com/v1/users/${candidate.id}`, { timeout: 2000 }).catch(() => null);
+          if (!userDetail || !userDetail.data) continue;
 
-        const createdDateObj = new Date(userDetail.data.created);
-        const createdYear = createdDateObj.getFullYear().toString();
+          const createdDateObj = new Date(userDetail.data.created);
+          const createdYear = createdDateObj.getFullYear().toString();
 
-        // SADECE VE SADECE seçilen yıl ile Roblox'taki gerçek açılış yılı birebir tutuyorsa kabul et!
-        if (createdYear === targetYear) {
-          const formattedDate = createdDateObj.toLocaleDateString('en-US', {
-            month: 'long',
-            day: 'numeric',
-            year: 'numeric'
-          });
+          // Sadece seçilen hedef yıla UYAN gerçek hesabı al!
+          if (createdYear === targetYear) {
+            const formattedDate = createdDateObj.toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric'
+            });
 
-          return {
-            id: user.id,
-            name: userDetail.data.name,
-            createdDate: formattedDate,
-            isBanned: userDetail.data.isBanned || false,
-            isVerified: userDetail.data.hasVerifiedBadge || false,
-            rapValue: '0',
-            avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${user.id}&width=150&height=150&format=png`
-          };
+            return {
+              id: candidate.id,
+              name: userDetail.data.name,
+              createdDate: formattedDate,
+              isBanned: userDetail.data.isBanned || false,
+              isVerified: userDetail.data.hasVerifiedBadge || false,
+              rapValue: '0',
+              avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${candidate.id}&width=150&height=150&format=png`
+            };
+          }
         }
       }
     } catch (e) {
-      // Hata alırsa sonraki denemeye geç
+      // API Hatasında sonraki denemeye geç
     }
   }
 
