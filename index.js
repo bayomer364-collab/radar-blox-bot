@@ -1,4 +1,4 @@
-Const { 
+const { 
   Client, 
   GatewayIntentBits, 
   ActionRowBuilder, 
@@ -18,8 +18,9 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 
 const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
 const CLIENT_ID = '1538484436272676954';
-const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345'; // Scraper ile bot arasındaki güvenlik şifresi
+const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const DB_FILE = path.join(__dirname, 'accounts.json');
+const ROLE_ID = '1538940771967700992'; // Bulk-Gen Rol ID
 
 const userGenCount = new Map();
 
@@ -33,7 +34,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// 1. EXPRESS WEBHOOK SUNUCUSU (Scraper'dan hesap kabul eder)
+// 1. EXPRESS WEBHOOK SUNUCUSU
 const app = express();
 app.use(express.json());
 
@@ -48,7 +49,6 @@ app.post('/api/add-account', (req, res) => {
   const key = `${targetYear}_${filterType}`;
   if (!db[key]) db[key] = [];
 
-  // Aynı hesabı tekrar eklememek için kontrol
   if (!db[key].some(acc => acc.id === accountData.id)) {
     db[key].push(accountData);
     saveDB(db);
@@ -58,13 +58,13 @@ app.post('/api/add-account', (req, res) => {
   return res.json({ success: true, stockCount: db[key].length });
 });
 
-// Render'ın kapanmaması için port dinleme
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Webhook server listening on port ${PORT}`));
 
 // 2. DISCORD BOT KOMUTLARI
 const commands = [
-  new SlashCommandBuilder().setName('gen').setDescription('Starts the RadarBlox generator.')
+  new SlashCommandBuilder().setName('gen').setDescription('Starts the RadarBlox generator.'),
+  new SlashCommandBuilder().setName('bulk-gen').setDescription('Generate multiple accounts.')
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -79,6 +79,8 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async (interaction) => {
+
+  // --- /gen KOMUTU ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
@@ -94,7 +96,119 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
+  // --- /bulk-gen KOMUTU ---
+  if (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') {
+    if (!interaction.member.roles.cache.has(ROLE_ID)) {
+      return await interaction.reply({ content: '❌ You need the **Bulk-Gen Customer** role to use this command.', ephemeral: true });
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`bulk_amt_5_${interaction.user.id}`).setLabel('5 Accounts').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`bulk_amt_10_${interaction.user.id}`).setLabel('10 Accounts').setStyle(ButtonStyle.Success)
+    );
+
+    await interaction.reply({ content: 'Select amount to generate:', components: [row], ephemeral: true });
+  }
+
+  // --- /bulk-gen Miktar Seçimi ---
+  if (interaction.isButton() && interaction.customId.startsWith('bulk_amt_')) {
+    await interaction.deferUpdate().catch(() => {});
+    const parts = interaction.customId.split('_');
+    const amount = parts[2];
+    const ownerId = parts[3];
+
+    if (interaction.user.id !== ownerId) return;
+
+    const yearSelect = new StringSelectMenuBuilder()
+      .setCustomId(`bulk_year_${amount}_${interaction.user.id}`)
+      .setPlaceholder('Select Account Creation Year (2006 - 2016)')
+      .addOptions(Array.from({ length: 11 }, (_, i) => {
+        const year = (2006 + i).toString();
+        return { label: year, value: year, description: `Accounts created in ${year}` };
+      }));
+
+    await interaction.editReply({
+      content: `Selected Amount: **${amount}**\nPlease select the creation year:`,
+      components: [new ActionRowBuilder().addComponents(yearSelect)]
+    });
+  }
+
+  // --- /bulk-gen Yıl Seçimi ---
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('bulk_year_')) {
+    await interaction.deferUpdate().catch(() => {});
+    const parts = interaction.customId.split('_');
+    const amount = parts[2];
+    const ownerId = parts[3];
+
+    if (interaction.user.id !== ownerId) return;
+
+    const selectedYear = interaction.values[0];
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`bulk_gen_no_number_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('no_number_user').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`bulk_gen_year_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('year_user').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`bulk_gen_double_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
+    );
+
+    await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row] });
+  }
+
+  // --- /bulk-gen Hesap Çekme İşlemi ---
+  if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
+    await interaction.deferUpdate().catch(() => {});
+    const parts = interaction.customId.split('_');
+    const filterType = `${parts[2]}_${parts[3]}`;
+    const targetYear = parts[4];
+    const amount = parseInt(parts[5]);
+    const ownerId = parts[6];
+
+    if (interaction.user.id !== ownerId) return;
+
+    const key = `${targetYear}_${filterType}`;
+    const db = getDB();
+    const stock = db[key] || [];
+
+    if (stock.length < amount) {
+      return await interaction.editReply({ content: `❌ Yetersiz stok! Gerekli: ${amount}, Mevcut: ${stock.length}`, components: [] });
+    }
+
+    const generatedAccounts = [];
+    for (let i = 0; i < amount; i++) {
+      generatedAccounts.push(stock.shift());
+    }
+    db[key] = stock;
+    saveDB(db);
+
+    const currentCount = (userGenCount.get(interaction.user.id) || 0) + amount;
+    userGenCount.set(interaction.user.id, currentCount);
+
+    const embeds = generatedAccounts.map((accountData, index) => {
+      return new EmbedBuilder()
+        .setTitle(`✨ BULK ACCOUNT #${index + 1}`)
+        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+        .setColor('#2B2D31')
+        .setThumbnail(accountData.avatarUrl)
+        .addFields(
+          { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
+          { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
+          { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+        )
+        .setFooter({ text: `RadarBlox Bulk Generator • Total Generations by you: ${currentCount}` })
+        .setTimestamp();
+    });
+
+    try {
+      await interaction.user.send({ embeds: embeds });
+      await interaction.editReply({ content: `✅ ${amount} accounts generated and sent to your DMs!`, components: [] });
+    } catch (e) {
+      await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
+    }
+  }
+
+  // --- /gen Yıl Seçimi ---
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
+    await interaction.deferUpdate().catch(() => {});
     const ownerId = interaction.customId.split('_')[2];
     if (interaction.user.id !== ownerId) return;
 
@@ -105,9 +219,10 @@ client.on('interactionCreate', async (interaction) => {
       new ButtonBuilder().setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.update({ content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`, components: [row] });
+    await interaction.editReply({ content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`, components: [row] });
   }
 
+  // --- /gen Hesap Çekme İşlemi ---
   if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
     const parts = interaction.customId.split('_');
     const filterType = `${parts[1]}_${parts[2]}`;
