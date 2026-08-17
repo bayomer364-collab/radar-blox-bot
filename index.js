@@ -19,13 +19,12 @@ const client = new Client({
   ],
 });
 
-// TOKEN AND CLIENT ID
 const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
 const CLIENT_ID = '1538484436272676954';
 
-// Memory Counters & Account Pools (Arka planda hazır tutulan hesaplar)
 const userGenCount = new Map();
-const accountPool = new Map(); // Key: "YEAR_FILTERTYPE", Value: Array of accounts
+// Arka planda toplanan hesapların saklandığı hafıza (Stok)
+const accountCache = new Map(); 
 
 const YEAR_ID_RANGES = {
   '2006': { min: 1, max: 20000 },
@@ -58,13 +57,12 @@ client.once('ready', async () => {
     console.error('Error registering slash command:', error);
   }
 
-  // Bot açıldığı an arka planda hesapları stoklamaya başlar
-  startBackgroundScraper();
+  // Bot açılır açılmaz arka planda stok yapmaya başlar
+  startBackgroundStocker();
 });
 
 client.on('interactionCreate', async (interaction) => {
   
-  // 1. Slash Command Triggered
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
@@ -85,7 +83,6 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // 2. Year Select Menu Interaction
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
     const ownerId = interaction.customId.split('_')[2];
 
@@ -118,10 +115,9 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // 3. Button Interaction
   if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
     const parts = interaction.customId.split('_');
-    const filterType = `${parts[1]}_${parts[2]}`; 
+    const filterType = `${parts[1]}_${parts[2]}`;
     const targetYear = parts[3];
     const ownerId = parts[4];
 
@@ -129,79 +125,68 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', ephemeral: true });
     }
 
-    await interaction.update({ content: '🔍 **Fetching matching Roblox account...**', components: [] });
+    await interaction.deferReply({ ephemeral: true });
+
+    const key = `${targetYear}_${filterType}`;
+    let stock = accountCache.get(key) || [];
+
+    // Eğer stokta hesap yoksa hızlıca 1 tane bulmayı dener
+    if (stock.length === 0) {
+      const fetched = await fetchOneAccount(targetYear, filterType);
+      if (fetched) stock.push(fetched);
+    }
+
+    if (stock.length === 0) {
+      return await interaction.editReply({ content: '❌ System is currently warming up stock. Please try again in 10 seconds!' });
+    }
+
+    // Stoktan hesabı al ve ver
+    const accountData = stock.shift();
+    accountCache.set(key, stock);
+
+    const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
+    userGenCount.set(interaction.user.id, currentCount);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
+      .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+      .setColor('#2B2D31')
+      .setThumbnail(accountData.avatarUrl)
+      .addFields(
+        { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
+        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+        { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
+        { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
+        { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+      )
+      .setImage(accountData.avatarUrl)
+      .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
+      .setTimestamp();
 
     try {
-      // Anında stoktan hesabı çek
-      const accountData = await getAccountFromPoolOrSearch(targetYear, filterType);
-
-      const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
-      userGenCount.set(interaction.user.id, currentCount);
-
-      const embed = new EmbedBuilder()
-        .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
-        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
-        .setColor('#2B2D31')
-        .setThumbnail(accountData.avatarUrl)
-        .addFields(
-          { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
-          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
-          { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
-          { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
-        )
-        .setImage(accountData.avatarUrl)
-        .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
-        .setTimestamp();
-
       await interaction.user.send({ embeds: [embed] });
-      await interaction.deleteReply().catch(() => {});
-
-    } catch (error) {
-      console.error(error);
-      await interaction.followUp({ content: '❌ Failed to send DM or search timeout! Please try again.', ephemeral: true });
+      await interaction.editReply({ content: '✅ Account generated! Check your DMs.' });
+    } catch (e) {
+      await interaction.editReply({ content: '❌ DM is locked! Please open your DMs.' });
     }
   }
 });
 
-// Arka planda hesabı stoklayan veya anlık bulan mekanizma
-async function getAccountFromPoolOrSearch(targetYear, filterType) {
-  const poolKey = `${targetYear}_${filterType}`;
-  const pool = accountPool.get(poolKey) || [];
-
-  // Stokta hazır hesap varsa doğrudan saniyesinde ver
-  if (pool.length > 0) {
-    const account = pool.shift();
-    accountPool.set(poolKey, pool);
-    return account;
-  }
-
-  // Stokta yoksa hızlıca tekil arama yap
-  return await fetchSingleAccount(targetYear, filterType);
-}
-
-// Tekil Roblox Hesabı Tarayıcısı
-async function fetchSingleAccount(targetYear, filterType) {
+// Tekli hesap bulma mantığı
+async function fetchOneAccount(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
-
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 30; i++) {
     const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-
     try {
-      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { timeout: 1500 });
+      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { timeout: 2000 });
       const data = res.data;
-      const accountYear = new Date(data.created).getFullYear().toString();
-
-      if (accountYear !== targetYear) continue;
+      if (new Date(data.created).getFullYear().toString() !== targetYear) continue;
 
       const username = data.name;
-
       if (filterType === 'no_number' && /\d/.test(username)) continue;
       if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) continue;
       if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
 
-      let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
-      
       return {
         id: data.id,
         name: data.name,
@@ -209,40 +194,38 @@ async function fetchSingleAccount(targetYear, filterType) {
         isBanned: data.isBanned,
         lastOnline: 'Hidden / Private',
         inventoryInfo: 'Scanned (Public/Private)',
-        avatarUrl: avatarUrl
+        avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`
       };
     } catch (err) {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 200));
     }
   }
-  throw new Error("Timeout searching account");
+  return null;
 }
 
-// Bot çalıştığı sürece arka planda havuzu dolduran döngü
-async function startBackgroundScraper() {
+// Arka planda Roblox'u yormadan stok yapan döngü
+async function startBackgroundStocker() {
   const years = Object.keys(YEAR_ID_RANGES);
   const filters = ['no_number', 'year_user', 'double_user'];
 
   while (true) {
     for (const year of years) {
       for (const filter of filters) {
-        const poolKey = `${year}_${filter}`;
-        const currentPool = accountPool.get(poolKey) || [];
+        const key = `${year}_${filter}`;
+        let currentStock = accountCache.get(key) || [];
 
-        // Her kategori için havuzda en fazla 5 hazır hesap tutulur
-        if (currentPool.length < 5) {
-          try {
-            const acc = await fetchSingleAccount(year, filter);
-            currentPool.push(acc);
-            accountPool.set(poolKey, currentPool);
-          } catch (e) {
-            // Rate-limit önleme molası
-            await new Promise(r => setTimeout(r, 1000));
+        // Her türden hafızada en az 3 stok tutar
+        if (currentStock.length < 3) {
+          const acc = await fetchOneAccount(year, filter);
+          if (acc) {
+            currentStock.push(acc);
+            accountCache.set(key, currentStock);
           }
         }
+        await new Promise(r => setTimeout(r, 300)); // Roblox ban atmasın diye bekleme süresi
       }
     }
-    await new Promise(r => setTimeout(r, 5000)); // Havuz kontrol döngüsü molası
+    await new Promise(r => setTimeout(r, 2000));
   }
 }
 
