@@ -21,6 +21,9 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 const FILTERS = ['no_number_user', 'year_user', 'double_user'];
 
+// Eşit dağılımı sağlamak için sıra takip değişkeni
+let filterIndex = 0;
+
 function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -37,9 +40,8 @@ function fetchJSON(url) {
   });
 }
 
-// ESKİ KODUN REGEX (FİLTRELEME) MANTIĞI
 function validateUsernameByFilter(username, filterType) {
-  // Kesin kural: İsmin içinde alt çizgi (_) KESİNLİKLE OLMAYACAK
+  // Kesin kural: Alt çizgi (_) olmayacak
   if (/_/.test(username)) return false;
 
   // 1. no_number_user: İsimde hiç rakam olmamalı
@@ -60,30 +62,27 @@ function validateUsernameByFilter(username, filterType) {
   return false;
 }
 
-// ROBLOX GERÇEK KULLANICI ID'LERİNİ TARAMA MANTIĞI
 async function scanRandomRobloxAccount() {
   const targetYear = getRandom(YEARS);
-  const targetFilter = getRandom(FILTERS);
-  const range = YEAR_ID_RANGES[targetYear];
+  
+  // Filtreleri sırayla seç (Eşit 3'e bölme mantığı)
+  const targetFilter = FILTERS[filterIndex];
+  filterIndex = (filterIndex + 1) % FILTERS.length; // 0, 1, 2 -> 0, 1, 2 şeklinde döner
 
-  // Rastgele ID seç
+  const range = YEAR_ID_RANGES[targetYear];
   const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
 
-  // Kullanıcı Detayını Çek
   const userDetails = await fetchJSON(`https://users.roblox.com/v1/users/${randomUserId}`);
   if (!userDetails || !userDetails.name) return;
 
-  // Yıl Doğrulaması
   const createdDate = new Date(userDetails.created);
   const accountYear = createdDate.getFullYear().toString();
   if (accountYear !== targetYear) return;
 
   const username = userDetails.name;
 
-  // Eski koddaki Regex mantığı ile ismi kontrol et
   if (!validateUsernameByFilter(username, targetFilter)) return;
 
-  // Avatar Görselini Çek
   const avatarData = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${randomUserId}&size=150x150&format=Png&isCircular=false`);
   const avatarUrl = (avatarData && avatarData.data && avatarData.data[0]) ? avatarData.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
@@ -102,7 +101,6 @@ async function scanRandomRobloxAccount() {
     }
   });
 
-  // Webhook ile Stoğa Gönder
   const webhookUrl = new URL(WEBHOOK_URL);
   const webhookOptions = {
     hostname: webhookUrl.hostname,
@@ -120,10 +118,11 @@ async function scanRandomRobloxAccount() {
   req.write(payload);
   req.end();
 
-  console.log(`[GERÇEK GERÇEK HESAP BULUNDU] ${username} (${accountYear}) - Filtre: ${targetFilter}`);
+  console.log(`[GERÇEK HESAP BULUNDU] ${username} (${accountYear}) - Filtre: ${targetFilter}`);
 }
 
-// Hızlı tarama yapabilmesi için eşzamanlı döngü
+// 100ms aralıklarla sırayla filtre taraması yapar
 setInterval(() => {
   scanRandomRobloxAccount().catch(() => {});
 }, 100);
+    
