@@ -274,5 +274,5 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 });
-
+require('./generator.js');
 client.login(TOKEN);
