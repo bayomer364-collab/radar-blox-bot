@@ -19,13 +19,14 @@ const client = new Client({
   ],
 });
 
+// TOKEN AND CLIENT ID
 const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
 const CLIENT_ID = '1538484436272676954';
 
+// User Generation Counter Memory
 const userGenCount = new Map();
-// Arka planda toplanan hesapların saklandığı hafıza (Stok)
-const accountCache = new Map(); 
 
+// Accurate Roblox User ID Ranges by Creation Year (2006 - 2016)
 const YEAR_ID_RANGES = {
   '2006': { min: 1, max: 20000 },
   '2007': { min: 20001, max: 200000 },
@@ -39,6 +40,9 @@ const YEAR_ID_RANGES = {
   '2015': { min: 80000001, max: 110000000 },
   '2016': { min: 110000001, max: 180000000 }
 };
+
+// İstekler arası bekleme için yardımcı fonksiyon
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const commands = [
   new SlashCommandBuilder()
@@ -56,13 +60,11 @@ client.once('ready', async () => {
   } catch (error) {
     console.error('Error registering slash command:', error);
   }
-
-  // Bot açılır açılmaz arka planda stok yapmaya başlar
-  startBackgroundStocker();
 });
 
 client.on('interactionCreate', async (interaction) => {
   
+  // 1. Slash Command Triggered
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
@@ -83,6 +85,7 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
+  // 2. Year Select Menu Interaction
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
     const ownerId = interaction.customId.split('_')[2];
 
@@ -115,9 +118,10 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
+  // 3. Button Interaction
   if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
     const parts = interaction.customId.split('_');
-    const filterType = `${parts[1]}_${parts[2]}`;
+    const filterType = `${parts[1]}_${parts[2]}`; // no_number, year_user, double_user
     const targetYear = parts[3];
     const ownerId = parts[4];
 
@@ -125,107 +129,102 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', ephemeral: true });
     }
 
-    await interaction.deferReply({ ephemeral: true });
-
-    const key = `${targetYear}_${filterType}`;
-    let stock = accountCache.get(key) || [];
-
-    // Eğer stokta hesap yoksa hızlıca 1 tane bulmayı dener
-    if (stock.length === 0) {
-      const fetched = await fetchOneAccount(targetYear, filterType);
-      if (fetched) stock.push(fetched);
-    }
-
-    if (stock.length === 0) {
-      return await interaction.editReply({ content: '❌ System is currently warming up stock. Please try again in 10 seconds!' });
-    }
-
-    // Stoktan hesabı al ve ver
-    const accountData = stock.shift();
-    accountCache.set(key, stock);
-
-    const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
-    userGenCount.set(interaction.user.id, currentCount);
-
-    const embed = new EmbedBuilder()
-      .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
-      .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
-      .setColor('#2B2D31')
-      .setThumbnail(accountData.avatarUrl)
-      .addFields(
-        { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
-        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-        { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
-        { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
-        { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
-      )
-      .setImage(accountData.avatarUrl)
-      .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
-      .setTimestamp();
+    // DISCORD TIMEOUT ÖNLEMİ: Discord'a "İşlem yapıyorum, bekle" sinyali gönderir.
+    await interaction.deferUpdate();
 
     try {
+      const accountData = await findRobloxAccountUntilFound(targetYear, filterType);
+
+      const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
+      userGenCount.set(interaction.user.id, currentCount);
+
+      const embed = new EmbedBuilder()
+        .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
+        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+        .setColor('#2B2D31')
+        .setThumbnail(accountData.avatarUrl)
+        .addFields(
+          { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
+          { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
+          { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+        )
+        .setImage(accountData.avatarUrl)
+        .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
+        .setTimestamp();
+
       await interaction.user.send({ embeds: [embed] });
-      await interaction.editReply({ content: '✅ Account generated! Check your DMs.' });
-    } catch (e) {
-      await interaction.editReply({ content: '❌ DM is locked! Please open your DMs.' });
+      await interaction.deleteReply().catch(() => {});
+
+    } catch (error) {
+      console.error(error);
+      await interaction.followUp({ content: '❌ Failed to send DM! Please ensure your DMs are open.', ephemeral: true });
     }
   }
 });
 
-// Tekli hesap bulma mantığı
-async function fetchOneAccount(targetYear, filterType) {
+async function findRobloxAccountUntilFound(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
-  for (let i = 0; i < 30; i++) {
+
+  while (true) {
     const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+
     try {
       const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { timeout: 2000 });
       const data = res.data;
-      if (new Date(data.created).getFullYear().toString() !== targetYear) continue;
+      const accountYear = new Date(data.created).getFullYear().toString();
+
+      if (accountYear !== targetYear) {
+        await sleep(250); // Uygun olmayan hesaplarda 250ms bekle (Roblox'u yorma)
+        continue;
+      }
 
       const username = data.name;
-      if (filterType === 'no_number' && /\d/.test(username)) continue;
-      if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) continue;
-      if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
+
+      // 1. no_number_user: İsimde hiç rakam olmamalı
+      if (filterType === 'no_number' && /\d/.test(username)) {
+        await sleep(250);
+        continue;
+      }
+
+      // 2. year_user: İsmin herhangi bir yerinde 4 haneli yıl içeren sayı olmalı (örn: 1998, 2001)
+      if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) {
+        await sleep(250);
+        continue;
+      }
+
+      // 3. double_user: İsmin herhangi bir yerinde çiftli tekrarlayan dizi olmalı (örn: 9090, 1212, 5050)
+      if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) {
+        await sleep(250);
+        continue;
+      }
+
+      let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
+      try {
+        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`);
+        if (thumbRes.data.data[0]?.imageUrl) {
+          avatarUrl = thumbRes.data.data[0].imageUrl;
+        }
+      } catch (e) {}
+
+      const createdDate = new Date(data.created).toLocaleDateString('en-US');
 
       return {
         id: data.id,
         name: data.name,
-        createdDate: new Date(data.created).toLocaleDateString('en-US'),
+        createdDate: createdDate,
         isBanned: data.isBanned,
         lastOnline: 'Hidden / Private',
         inventoryInfo: 'Scanned (Public/Private)',
-        avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`
+        avatarUrl: avatarUrl
       };
+
     } catch (err) {
-      await new Promise(r => setTimeout(r, 200));
+      // Hata (429 Rate Limit vb.) aldığında Roblox'un engeli kaldırması için 2 saniye bekle
+      await sleep(2000);
+      continue;
     }
-  }
-  return null;
-}
-
-// Arka planda Roblox'u yormadan stok yapan döngü
-async function startBackgroundStocker() {
-  const years = Object.keys(YEAR_ID_RANGES);
-  const filters = ['no_number', 'year_user', 'double_user'];
-
-  while (true) {
-    for (const year of years) {
-      for (const filter of filters) {
-        const key = `${year}_${filter}`;
-        let currentStock = accountCache.get(key) || [];
-
-        // Her türden hafızada en az 3 stok tutar
-        if (currentStock.length < 3) {
-          const acc = await fetchOneAccount(year, filter);
-          if (acc) {
-            currentStock.push(acc);
-            accountCache.set(key, currentStock);
-          }
-        }
-        await new Promise(r => setTimeout(r, 300)); // Roblox ban atmasın diye bekleme süresi
-      }
-    }
-    await new Promise(r => setTimeout(r, 2000));
   }
 }
 
