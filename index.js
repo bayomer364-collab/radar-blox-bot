@@ -16,7 +16,7 @@ const path = require('path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
-const TOKEN = 'MTUzODQ4NDQzNjI3MjY3Njk1NA.G4AbV1.Hx5eMbcZTXYJz1SN0nrojqGJUf_u13j9ph80XQ';
+const TOKEN = '';
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const DB_FILE = path.join(__dirname, 'accounts.json');
