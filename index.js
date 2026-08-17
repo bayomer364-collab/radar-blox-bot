@@ -16,7 +16,7 @@ const path = require('path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
-const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
+const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const DB_FILE = path.join(__dirname, 'accounts.json');
