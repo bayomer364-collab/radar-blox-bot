@@ -1,15 +1,3 @@
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 10000;
-
-app.get('/', (req, res) => {
-  res.send('RadarBlox 7/24 Aktif!');
-});
-
-app.listen(port, () => {
-  console.log(`Port ${port} üzerinde web sunucusu başarıyla başlatıldı.`);
-});
-
 const { 
   Client, 
   GatewayIntentBits, 
@@ -31,11 +19,13 @@ const client = new Client({
   ],
 });
 
-const TOKEN = process.env.TOKEN;
+// TOKEN AND CLIENT ID
+const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
 const CLIENT_ID = '1538484436272676954';
 
+// Memory Counters & Account Pools (Arka planda hazır tutulan hesaplar)
 const userGenCount = new Map();
-const cooldowns = new Map();
+const accountPool = new Map(); // Key: "YEAR_FILTERTYPE", Value: Array of accounts
 
 const YEAR_ID_RANGES = {
   '2006': { min: 1, max: 20000 },
@@ -59,7 +49,7 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
   console.log(`${client.user.tag} is online and ready!`);
   try {
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
@@ -67,224 +57,193 @@ client.once('clientReady', async () => {
   } catch (error) {
     console.error('Error registering slash command:', error);
   }
+
+  // Bot açıldığı an arka planda hesapları stoklamaya başlar
+  startBackgroundScraper();
 });
 
 client.on('interactionCreate', async (interaction) => {
-  try {
-    // 1. /gen Command
-    if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
-      const lastUsed = cooldowns.get(interaction.user.id);
-      const now = Date.now();
-      const cooldownAmount = 10 * 1000;
+  
+  // 1. Slash Command Triggered
+  if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
+    const yearSelect = new StringSelectMenuBuilder()
+      .setCustomId(`select_year_${interaction.user.id}`)
+      .setPlaceholder('Select Account Creation Year (2006 - 2016)')
+      .addOptions(
+        Array.from({ length: 11 }, (_, i) => {
+          const year = (2006 + i).toString();
+          return { label: year, value: year, description: `Accounts created in ${year}` };
+        })
+      );
 
-      if (lastUsed && (now - lastUsed < cooldownAmount)) {
-        const timeLeft = ((cooldownAmount - (now - lastUsed)) / 1000).toFixed(1);
-        return await interaction.reply({ 
-          content: `⏳ **Anti-Spam active! Please wait ${timeLeft}s before generating again.**`, 
-          flags: 64 
-        });
-      }
+    const row = new ActionRowBuilder().addComponents(yearSelect);
 
-      const yearSelect = new StringSelectMenuBuilder()
-        .setCustomId(`select_year_${interaction.user.id}`)
-        .setPlaceholder('Select Account Creation Year (2006 - 2016)')
-        .addOptions(
-          Array.from({ length: 11 }, (_, i) => {
-            const year = (2006 + i).toString();
-            return { label: year, value: year, description: `Accounts created in ${year}` };
-          })
-        );
+    await interaction.reply({
+      content: 'Please select the creation year for the account:',
+      components: [row],
+      ephemeral: false
+    });
+  }
 
-      const row = new ActionRowBuilder().addComponents(yearSelect);
+  // 2. Year Select Menu Interaction
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
+    const ownerId = interaction.customId.split('_')[2];
 
-      await interaction.reply({
-        content: 'Please select the creation year for the account:',
-        components: [row]
-      });
+    if (interaction.user.id !== ownerId) {
+      return await interaction.reply({ content: '❌ This menu is not for you! Run `/gen` to start your own.', ephemeral: true });
     }
 
-    // 2. Year Selection
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
-      const ownerId = interaction.customId.split('_')[2];
+    const selectedYear = interaction.values[0];
 
-      if (interaction.user.id !== ownerId) {
-        return await interaction.reply({ content: '❌ This menu is not for you! Run `/gen` to start your own.', flags: 64 });
-      }
+    const btnNoNumber = new ButtonBuilder()
+      .setCustomId(`gen_no_number_${selectedYear}_${interaction.user.id}`)
+      .setLabel('no_number_user')
+      .setStyle(ButtonStyle.Primary);
 
-      const selectedYear = interaction.values[0];
+    const btnYearUser = new ButtonBuilder()
+      .setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`)
+      .setLabel('year_user')
+      .setStyle(ButtonStyle.Success);
 
-      const btnNoNumber = new ButtonBuilder()
-        .setCustomId(`gen_no_number_${selectedYear}_${interaction.user.id}`)
-        .setLabel('no_number_user')
-        .setStyle(ButtonStyle.Primary);
+    const btnDoubleUser = new ButtonBuilder()
+      .setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`)
+      .setLabel('double_user')
+      .setStyle(ButtonStyle.Danger);
 
-      const btnYearUser = new ButtonBuilder()
-        .setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`)
-        .setLabel('year_user')
-        .setStyle(ButtonStyle.Success);
+    const row = new ActionRowBuilder().addComponents(btnNoNumber, btnYearUser, btnDoubleUser);
 
-      const btnDoubleUser = new ButtonBuilder()
-        .setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`)
-        .setLabel('double_user')
-        .setStyle(ButtonStyle.Danger);
+    await interaction.update({
+      content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`,
+      components: [row]
+    });
+  }
 
-      const row = new ActionRowBuilder().addComponents(btnNoNumber, btnYearUser, btnDoubleUser);
+  // 3. Button Interaction
+  if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
+    const parts = interaction.customId.split('_');
+    const filterType = `${parts[1]}_${parts[2]}`; 
+    const targetYear = parts[3];
+    const ownerId = parts[4];
 
-      await interaction.update({
-        content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`,
-        components: [row]
-      });
+    if (interaction.user.id !== ownerId) {
+      return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', ephemeral: true });
     }
 
-    // 3. Button Click & Generation
-    if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
-      const parts = interaction.customId.split('_');
-      const filterType = `${parts[1]}_${parts[2]}`;
-      const targetYear = parts[3];
-      const ownerId = parts[4];
+    await interaction.update({ content: '🔍 **Fetching matching Roblox account...**', components: [] });
 
-      if (interaction.user.id !== ownerId) {
-        return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', flags: 64 });
-      }
+    try {
+      // Anında stoktan hesabı çek
+      const accountData = await getAccountFromPoolOrSearch(targetYear, filterType);
 
-      // Anında yanıt vererek 3 saniyelik zaman aşımını engelle
-      await interaction.deferUpdate();
-      cooldowns.set(interaction.user.id, Date.now());
-      await interaction.editReply({ content: '⚡ **Scanning Roblox network at maximum speed...**', components: [] });
+      const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
+      userGenCount.set(interaction.user.id, currentCount);
 
-      try {
-        const accountData = await ultraFastRobloxSearch(targetYear, filterType);
+      const embed = new EmbedBuilder()
+        .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
+        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+        .setColor('#2B2D31')
+        .setThumbnail(accountData.avatarUrl)
+        .addFields(
+          { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
+          { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
+          { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+        )
+        .setImage(accountData.avatarUrl)
+        .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
+        .setTimestamp();
 
-        if (!accountData) {
-          return await interaction.followUp({ content: '❌ Could not find a matching account in time. Please try again!', flags: 64 });
-        }
+      await interaction.user.send({ embeds: [embed] });
+      await interaction.deleteReply().catch(() => {});
 
-        const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
-        userGenCount.set(interaction.user.id, currentCount);
-
-        const embed = new EmbedBuilder()
-          .setTitle('🔑 Account Generation')
-          .setDescription('Your account name has been generated.')
-          .setThumbnail(accountData.avatarUrl)
-          .setColor('#00A2FF')
-          .addFields(
-            { name: '🌍 Selected Year', value: targetYear, inline: false },
-            { name: '🛠️ Selected Method', value: filterType, inline: false },
-            { name: '👤 Usage Count', value: currentCount.toString(), inline: false },
-            { name: '✅ Result', value: `Account name successfully generated:\n**${accountData.name}**`, inline: false },
-            { name: '📅 Account Created', value: accountData.createdDate, inline: false },
-            { name: '🚫 Banned?', value: accountData.isBanned ? 'Yes' : 'No', inline: false },
-            { name: '💰 RAP', value: accountData.rapValue, inline: false },
-            { name: '✅ Verified', value: accountData.isVerified ? 'Yes' : 'No', inline: false }
-          );
-
-        await interaction.user.send({ embeds: [embed] });
-        await interaction.deleteReply().catch(() => {});
-
-      } catch (error) {
-        console.error(error);
-        await interaction.followUp({ content: '❌ Could not send DM! Please make sure your DMs are open.', flags: 64 });
-      }
+    } catch (error) {
+      console.error(error);
+      await interaction.followUp({ content: '❌ Failed to send DM or search timeout! Please try again.', ephemeral: true });
     }
-  } catch (err) {
-    console.error('Interaction error caught:', err);
   }
 });
 
-// Optimized Search with Max Attempts to Prevent Infinite Loops
-async function ultraFastRobloxSearch(targetYear, filterType) {
+// Arka planda hesabı stoklayan veya anlık bulan mekanizma
+async function getAccountFromPoolOrSearch(targetYear, filterType) {
+  const poolKey = `${targetYear}_${filterType}`;
+  const pool = accountPool.get(poolKey) || [];
+
+  // Stokta hazır hesap varsa doğrudan saniyesinde ver
+  if (pool.length > 0) {
+    const account = pool.shift();
+    accountPool.set(poolKey, pool);
+    return account;
+  }
+
+  // Stokta yoksa hızlıca tekil arama yap
+  return await fetchSingleAccount(targetYear, filterType);
+}
+
+// Tekil Roblox Hesabı Tarayıcısı
+async function fetchSingleAccount(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
-  let attempts = 0;
-  const maxAttempts = 10; // Maksimum 10 tur (300 istek) tara
 
-  while (attempts < maxAttempts) {
-    attempts++;
-    const batch = Array.from({ length: 20 }, () => 
-      Math.floor(Math.random() * (range.max - range.min + 1)) + range.min
-    );
+  for (let i = 0; i < 50; i++) {
+    const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
 
-    const promises = batch.map(async (userId) => {
-      try {
-        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 2500 });
-        const data = res.data;
-        const accountYear = new Date(data.created).getFullYear().toString();
+    try {
+      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { timeout: 1500 });
+      const data = res.data;
+      const accountYear = new Date(data.created).getFullYear().toString();
 
-        if (accountYear !== targetYear) return null;
+      if (accountYear !== targetYear) continue;
 
-        const username = data.name;
+      const username = data.name;
 
-        if (filterType === 'no_number' && /\d/.test(username)) return null;
-        if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) return null;
-        if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) return null;
+      if (filterType === 'no_number' && /\d/.test(username)) continue;
+      if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) continue;
+      if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
 
-        return data;
-      } catch (err) {
-        return null;
-      }
-    });
-
-    const results = await Promise.all(promises);
-    const matchedUser = results.find(u => u !== null);
-
-    if (matchedUser) {
-      const [rapValue, avatarData] = await Promise.all([
-        getRAPValue(matchedUser.id),
-        getAvatarUrl(matchedUser.id)
-      ]);
-
-      const formattedDate = new Date(matchedUser.created).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
-
+      let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
+      
       return {
-        id: matchedUser.id,
-        name: matchedUser.name,
-        createdDate: formattedDate,
-        isBanned: matchedUser.isBanned,
-        isVerified: matchedUser.hasVerifiedBadge || false,
-        rapValue: rapValue,
-        avatarUrl: avatarData
+        id: data.id,
+        name: data.name,
+        createdDate: new Date(data.created).toLocaleDateString('en-US'),
+        isBanned: data.isBanned,
+        lastOnline: 'Hidden / Private',
+        inventoryInfo: 'Scanned (Public/Private)',
+        avatarUrl: avatarUrl
       };
+    } catch (err) {
+      await new Promise(r => setTimeout(r, 100));
     }
   }
-  return null;
+  throw new Error("Timeout searching account");
 }
 
-// RAP Scanner
-async function getRAPValue(userId) {
-  try {
-    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 2500 });
-    const items = res.data.data || [];
-    
-    let totalRAP = 0;
-    items.forEach(item => {
-      totalRAP += (item.recentAveragePrice || 0);
-    });
+// Bot çalıştığı sürece arka planda havuzu dolduran döngü
+async function startBackgroundScraper() {
+  const years = Object.keys(YEAR_ID_RANGES);
+  const filters = ['no_number', 'year_user', 'double_user'];
 
-    return totalRAP.toString();
-  } catch {
-    return '0';
+  while (true) {
+    for (const year of years) {
+      for (const filter of filters) {
+        const poolKey = `${year}_${filter}`;
+        const currentPool = accountPool.get(poolKey) || [];
+
+        // Her kategori için havuzda en fazla 5 hazır hesap tutulur
+        if (currentPool.length < 5) {
+          try {
+            const acc = await fetchSingleAccount(year, filter);
+            currentPool.push(acc);
+            accountPool.set(poolKey, currentPool);
+          } catch (e) {
+            // Rate-limit önleme molası
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+      }
+    }
+    await new Promise(r => setTimeout(r, 5000)); // Havuz kontrol döngüsü molası
   }
 }
-
-// Headshot Avatar URL Fetcher
-async function getAvatarUrl(userId) {
-  try {
-    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 2500 });
-    return res.data.data[0]?.imageUrl || `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
-  } catch {
-    return `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
-  }
-}
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-process.on('uncaughtException', (err, origin) => {
-  console.error('Uncaught Exception caught:', err, 'origin:', origin);
-});
 
 client.login(TOKEN);
