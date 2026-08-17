@@ -282,29 +282,4 @@ client.on('interactionCreate', async (interaction) => {
 
 require('./generator.js');
 client.login(TOKEN);
-ilder()
-      .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
-      .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
-      .setColor('#2B2D31')
-      .setThumbnail(accountData.avatarUrl)
-      .addFields(
-        { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
-        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-        { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
-        { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
-        { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
-      )
-      .setImage(accountData.avatarUrl)
-      .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
-      .setTimestamp();
-
-    try {
-      await interaction.user.send({ embeds: [embed] });
-      await interaction.editReply({ content: '✅ Account generated! Check your DMs.' });
-    } catch (e) {
-      await interaction.editReply({ content: '❌ Please open your DMs!' });
-    }
-  }
-});
-require('./generator.js');
-client.login(TOKEN);
+      
