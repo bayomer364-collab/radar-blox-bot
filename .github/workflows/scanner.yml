@@ -2,8 +2,8 @@ name: Roblox Account Scanner
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Her 15 dakikada bir otomatik çalışır
-  workflow_dispatch: # İstersen GitHub panelinden tek tıkla manuel başlatabilirsin
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   scan:
