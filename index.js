@@ -61,7 +61,6 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   
-  // 1. Slash Command Triggered
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
@@ -82,7 +81,6 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // 2. Year Select Menu Interaction
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
     const ownerId = interaction.customId.split('_')[2];
 
@@ -115,10 +113,9 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // 3. Button Interaction
   if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
     const parts = interaction.customId.split('_');
-    const filterType = `${parts[1]}_${parts[2]}`; // no_number, year_user, double_user
+    const filterType = `${parts[1]}_${parts[2]}`;
     const targetYear = parts[3];
     const ownerId = parts[4];
 
@@ -142,7 +139,7 @@ client.on('interactionCreate', async (interaction) => {
         .addFields(
           { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
           { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned / Inactive' : '✅ Active', inline: true },
+          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
           { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
           { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
         )
@@ -162,12 +159,15 @@ client.on('interactionCreate', async (interaction) => {
 
 async function findRobloxAccountUntilFound(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
+  const axiosHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+  };
 
   while (true) {
     const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
 
     try {
-      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`);
+      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { headers: axiosHeaders });
       const data = res.data;
       const accountYear = new Date(data.created).getFullYear().toString();
 
@@ -175,47 +175,43 @@ async function findRobloxAccountUntilFound(targetYear, filterType) {
 
       const username = data.name;
 
-      // 1. no_number_user: İsimde hiç rakam olmamalı
       if (filterType === 'no_number' && /\d/.test(username)) continue;
-
-      // 2. year_user: İsmin herhangi bir yerinde 4 haneli yıl içeren sayı olmalı (örn: 1998, 2001)
       if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) continue;
-
-      // 3. double_user: İsmin herhangi bir yerinde çiftli tekrarlayan dizi olmalı (örn: 9090, 1212, 5050)
       if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
 
-      // Avatar Thumbnail Alma
+      // Avatar
       let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
       try {
-        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`);
+        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`, { headers: axiosHeaders });
         if (thumbRes.data.data[0]?.imageUrl) {
           avatarUrl = thumbRes.data.data[0].imageUrl;
         }
       } catch (e) {}
 
-      // Last Online (Presence API) Çekme
-      let lastOnline = 'Hidden / Offline';
+      // Last Online (Presence API)
+      let lastOnline = 'Offline / Unknown';
       try {
         const presenceRes = await axios.post('https://presence.roblox.com/v1/presence/users', {
           userIds: [data.id]
-        });
-        const userPresence = presenceRes.data.userPresences[0];
+        }, { headers: axiosHeaders });
+        
+        const userPresence = presenceRes.data.userPresences?.[0];
         if (userPresence && userPresence.lastOnline) {
           const dateObj = new Date(userPresence.lastOnline);
-          lastOnline = dateObj.toLocaleDateString('en-US');
+          lastOnline = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
         }
       } catch (e) {}
 
-      // Inventory Access (Envanter Gizlilik) Kontrolü
+      // Inventory Access
       let inventoryInfo = 'Private';
       try {
-        const invRes = await axios.get(`https://inventory.roblox.com/v1/users/${data.id}/can-view-inventory`);
+        const invRes = await axios.get(`https://inventory.roblox.com/v1/users/${data.id}/can-view-inventory`, { headers: axiosHeaders });
         if (invRes.data && invRes.data.canView === true) {
           inventoryInfo = 'Public';
         }
       } catch (e) {}
 
-      const createdDate = new Date(data.created).toLocaleDateString('en-US');
+      const createdDate = new Date(data.created).toISOString().split('T')[0];
 
       return {
         id: data.id,
@@ -228,7 +224,7 @@ async function findRobloxAccountUntilFound(targetYear, filterType) {
       };
 
     } catch (err) {
-      await new Promise(resolve => setTimeout(resolve, 20)); // Hızlı arama için 20ms bekleme
+      await new Promise(resolve => setTimeout(resolve, 50));
       continue;
     }
   }
