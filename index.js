@@ -13,17 +13,17 @@ const {
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const bulkModule = require('./bulk.js'); // bulk.js modülü dahil edildi
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
 const TOKEN = 'BURAYA_BOT_TOKENINI_YAPIŞTIR';
 const CLIENT_ID = '1538484436272676954';
-const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345'; // Scraper ile bot arasındaki güvenlik şifresi
+const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 const userGenCount = new Map();
 
-// JSON Veritabanı Yardımcıları
 function getDB() {
   if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
   try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (e) { return {}; }
@@ -33,7 +33,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
 
-// 1. EXPRESS WEBHOOK SUNUCUSU (Scraper'dan hesap kabul eder)
+// 1. EXPRESS WEBHOOK SUNUCUSU
 const app = express();
 app.use(express.json());
 
@@ -48,7 +48,6 @@ app.post('/api/add-account', (req, res) => {
   const key = `${targetYear}_${filterType}`;
   if (!db[key]) db[key] = [];
 
-  // Aynı hesabı tekrar eklememek için kontrol
   if (!db[key].some(acc => acc.id === accountData.id)) {
     db[key].push(accountData);
     saveDB(db);
@@ -58,13 +57,13 @@ app.post('/api/add-account', (req, res) => {
   return res.json({ success: true, stockCount: db[key].length });
 });
 
-// Render'ın kapanmaması için port dinleme
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Webhook server listening on port ${PORT}`));
 
-// 2. DISCORD BOT KOMUTLARI
+// 2. DISCORD BOT KOMUTLARI REGISTER
 const commands = [
-  new SlashCommandBuilder().setName('gen').setDescription('Starts the RadarBlox generator.')
+  new SlashCommandBuilder().setName('gen').setDescription('Starts the RadarBlox generator.'),
+  bulkModule.data // /bulk-gen komutu da Discord'a kayıt ediliyor
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -73,12 +72,23 @@ client.once('ready', async () => {
   console.log(`${client.user.tag} is online and ready!`);
   try {
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+    console.log('Komutlar başarıyla kaydedildi.');
   } catch (error) {
     console.error(error);
   }
 });
 
 client.on('interactionCreate', async (interaction) => {
+  // Eğer etkileşim /bulk-gen ile ilgiliyse doğrudan bulk.js yönetir
+  if (
+    (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') ||
+    (interaction.isButton() && interaction.customId.startsWith('bulk_')) ||
+    (interaction.isStringSelectMenu() && interaction.customId.startsWith('bulk_'))
+  ) {
+    return await bulkModule.handleInteraction(interaction, userGenCount);
+  }
+
+  // Normal /gen komutu ve buton mantığı (Dokunulmadı)
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
@@ -140,10 +150,7 @@ client.on('interactionCreate', async (interaction) => {
       .setThumbnail(accountData.avatarUrl)
       .addFields(
         { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
-        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-        { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
-        { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
-        { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true }
       )
       .setImage(accountData.avatarUrl)
       .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
