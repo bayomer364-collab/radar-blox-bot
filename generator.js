@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] generator.js akıllı filtreleme moduyla başlatıldı!');
+console.log('[DEBUG] GitHub Actions için optimize edilmiş generator.js başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -32,15 +32,12 @@ function fetchJSON(url) {
   });
 }
 
-// Kullanıcı adının hangi kategoriye ait olduğunu tam olarak analiz eden fonksiyon
 function validateUsernameByFilter(username) {
   if (/_/.test(username)) return null;
 
-  // 1. Kriter: İçinde 19xx veya 20xx geçiyor mu? -> year_user
   if (/(19\d{2}|20\d{2})/.test(username)) {
     return 'year_user';
   }
-  // 2. Kriter: Yan yana aynı iki rakam var mı? (örn: xx55, aa99) -> double_user
   if (/(\d{2})\1/.test(username)) {
     return 'double_user';
   }
@@ -48,90 +45,97 @@ function validateUsernameByFilter(username) {
   return null;
 }
 
-async function scanNext() {
-  const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
-  const testId = currentIds[targetYear];
-  currentIds[targetYear]++; // Sıradaki ID'ye geç
+function sendWebhook(payload) {
+  return new Promise((resolve) => {
+    const webhookUrl = new URL(WEBHOOK_URL);
+    const webhookOptions = {
+      hostname: webhookUrl.hostname,
+      port: 443,
+      path: webhookUrl.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
 
-  const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
-  
-  if (res.status === 429) {
-    console.log('[WARNING] Rate limit (429) algılandı, biraz bekleniyor...');
-    return 15000;
-  }
-
-  if (!res.data || !res.data.name) return 2000; // Hesap yoksa hızlıca sonrakine geç
-
-  const userDetails = res.data;
-  const createdDate = new Date(userDetails.created);
-  const accountYear = createdDate.getFullYear().toString();
-  
-  if (accountYear !== targetYear) return 2000;
-
-  const username = userDetails.name;
-  
-  // İsim kurallara uyuyor mu diye kontrol et (boşa kürek çekmemek için filtre süzgeci)
-  const matchedFilter = validateUsernameByFilter(username);
-  if (!matchedFilter) return 2000; // Filtreye uymuyorsa es geç
-
-  // Filtreye uydu! Avatarı çek ve ilgili kategoriye gönder
-  const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
-  const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
-
-  const payload = JSON.stringify({
-    secret: WEBHOOK_SECRET,
-    targetYear: accountYear,
-    filterType: matchedFilter, // Doğru metoda (year_user veya double_user) yollanıyor
-    accountData: {
-      id: userDetails.id.toString(),
-      name: username,
-      createdDate: createdDate.toISOString().split('T')[0],
-      isBanned: userDetails.isBanned || false,
-      lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
-      inventoryInfo: 'Scanned (Public/Private)',
-      avatarUrl: avatarUrl
-    }
-  });
-
-  const webhookUrl = new URL(WEBHOOK_URL);
-  const webhookOptions = {
-    hostname: webhookUrl.hostname,
-    port: 443,
-    path: webhookUrl.pathname,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload)
-    }
-  };
-
-  const req = https.request(webhookOptions, (webhookRes) => {
-    let responseData = '';
-    webhookRes.on('data', chunk => responseData += chunk);
-    webhookRes.on('end', () => {
-      console.log(`[WEBHOOK RESPONSE] Status: ${webhookRes.statusCode}, Answer: ${responseData}`);
+    const req = https.request(webhookOptions, (webhookRes) => {
+      let responseData = '';
+      webhookRes.on('data', chunk => responseData += chunk);
+      webhookRes.on('end', () => resolve());
     });
+
+    req.on('error', () => resolve());
+    req.write(payload);
+    req.end();
   });
-
-  req.on('error', (err) => console.error('[WEBHOOK ERROR]:', err.message));
-  req.write(payload);
-  req.end();
-
-  console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${matchedFilter} [ID: ${testId}]`);
-  return 3000;
 }
 
-async function startLoop() {
-  while (true) {
-    try {
-      const delay = await scanNext();
-      await new Promise(resolve => setTimeout(resolve, delay));
-    } catch (err) {
-      console.error('[SCAN LOOP ERROR]:', err);
-      await new Promise(resolve => setTimeout(resolve, 3500));
+async function scanBatch() {
+  // GitHub her 15 dakikada bir çalıştırdığı için her çalıştırmada örneğin 50-60 istek atsın ve kapansın
+  const ITERATIONS = 50; 
+
+  for (let i = 0; i < ITERATIONS; i++) {
+    const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
+    const testId = currentIds[targetYear];
+    currentIds[targetYear]++;
+
+    const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
+    
+    if (res.status === 429) {
+      console.log('[WARNING] Rate limit (429) algılandı, bu tur kısa kesiliyor...');
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      break;
     }
+
+    if (!res.data || !res.data.name) {
+      await new Promise(resolve => setTimeout(resolve, 800)); // Boşsa hızlı geç
+      continue;
+    }
+
+    const userDetails = res.data;
+    const createdDate = new Date(userDetails.created);
+    const accountYear = createdDate.getFullYear().toString();
+    
+    if (accountYear !== targetYear) {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      continue;
+    }
+
+    const username = userDetails.name;
+    const matchedFilter = validateUsernameByFilter(username);
+    
+    if (!matchedFilter) {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      continue;
+    }
+
+    const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
+    const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
+
+    const payload = JSON.stringify({
+      secret: WEBHOOK_SECRET,
+      targetYear: accountYear,
+      filterType: matchedFilter,
+      accountData: {
+        id: userDetails.id.toString(),
+        name: username,
+        createdDate: createdDate.toISOString().split('T')[0],
+        isBanned: userDetails.isBanned || false,
+        lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
+        inventoryInfo: 'Scanned (Public/Private)',
+        avatarUrl: avatarUrl
+      }
+    });
+
+    await sendWebhook(payload);
+    console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${matchedFilter} [ID: ${testId}]`);
+
+    // İstekler arası küçük bir bekleme (GitHub IP'lerinin banlanmaması için)
+    await new Promise(resolve => setTimeout(resolve, 1500));
   }
+
+  console.log('[DEBUG] Bu tur tarama tamamlandı, script güvenle kapanıyor.');
 }
 
-startLoop();
-                     
+scanBatch();
