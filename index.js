@@ -83,10 +83,7 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
     const ownerId = interaction.customId.split('_')[2];
-
-    if (interaction.user.id !== ownerId) {
-      return await interaction.reply({ content: '❌ This menu is not for you! Run `/gen` to start your own.', ephemeral: true });
-    }
+    if (interaction.user.id !== ownerId) return;
 
     const selectedYear = interaction.values[0];
 
@@ -119,15 +116,12 @@ client.on('interactionCreate', async (interaction) => {
     const targetYear = parts[3];
     const ownerId = parts[4];
 
-    if (interaction.user.id !== ownerId) {
-      return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', ephemeral: true });
-    }
+    if (interaction.user.id !== ownerId) return;
 
     await interaction.update({ content: '🔍 **Searching for matching Roblox account... Please wait.**', components: [] });
 
     try {
       const accountData = await findRobloxAccountUntilFound(targetYear, filterType);
-
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
 
@@ -138,10 +132,7 @@ client.on('interactionCreate', async (interaction) => {
         .setThumbnail(accountData.avatarUrl)
         .addFields(
           { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
-          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
-          { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
-          { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true }
         )
         .setImage(accountData.avatarUrl)
         .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
@@ -149,82 +140,43 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.user.send({ embeds: [embed] });
       await interaction.deleteReply().catch(() => {});
-
     } catch (error) {
       console.error(error);
-      await interaction.followUp({ content: '❌ Failed to send DM! Please ensure your DMs are open.', ephemeral: true });
+      await interaction.followUp({ content: '❌ DM gönderilemedi! Lütfen gizlilik ayarlarını kontrol et.', ephemeral: true });
     }
   }
 });
 
 async function findRobloxAccountUntilFound(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
-  const axiosHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-  };
+  const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' };
 
   while (true) {
     const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-
     try {
-      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { headers: axiosHeaders });
+      const res = await axios.get(`https://users.roblox.com/v1/users/${randomUserId}`, { headers });
       const data = res.data;
-      const accountYear = new Date(data.created).getFullYear().toString();
-
-      if (accountYear !== targetYear) continue;
+      if (new Date(data.created).getFullYear().toString() !== targetYear) continue;
 
       const username = data.name;
-
       if (filterType === 'no_number' && /\d/.test(username)) continue;
       if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) continue;
       if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) continue;
 
-      // Avatar
       let avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${data.id}&width=420&height=420&format=png`;
       try {
-        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`, { headers: axiosHeaders });
-        if (thumbRes.data.data[0]?.imageUrl) {
-          avatarUrl = thumbRes.data.data[0].imageUrl;
-        }
+        const thumbRes = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${data.id}&size=720x720&format=Png&isCircular=false`, { headers });
+        if (thumbRes.data.data[0]?.imageUrl) avatarUrl = thumbRes.data.data[0].imageUrl;
       } catch (e) {}
-
-      // Last Online (Presence API)
-      let lastOnline = 'Offline / Unknown';
-      try {
-        const presenceRes = await axios.post('https://presence.roblox.com/v1/presence/users', {
-          userIds: [data.id]
-        }, { headers: axiosHeaders });
-        
-        const userPresence = presenceRes.data.userPresences?.[0];
-        if (userPresence && userPresence.lastOnline) {
-          const dateObj = new Date(userPresence.lastOnline);
-          lastOnline = dateObj.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-        }
-      } catch (e) {}
-
-      // Inventory Access
-      let inventoryInfo = 'Private';
-      try {
-        const invRes = await axios.get(`https://inventory.roblox.com/v1/users/${data.id}/can-view-inventory`, { headers: axiosHeaders });
-        if (invRes.data && invRes.data.canView === true) {
-          inventoryInfo = 'Public';
-        }
-      } catch (e) {}
-
-      const createdDate = new Date(data.created).toISOString().split('T')[0];
 
       return {
         id: data.id,
         name: data.name,
-        createdDate: createdDate,
-        isBanned: data.isBanned || false,
-        lastOnline: lastOnline,
-        inventoryInfo: inventoryInfo,
+        createdDate: new Date(data.created).toISOString().split('T')[0],
         avatarUrl: avatarUrl
       };
-
     } catch (err) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(r => setTimeout(r, 50));
       continue;
     }
   }
