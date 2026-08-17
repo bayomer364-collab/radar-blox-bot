@@ -37,18 +37,19 @@ const CLIENT_ID = '1538484436272676954';
 const userGenCount = new Map();
 const cooldowns = new Map();
 
+// Genişletilmiş ID Aralıkları
 const YEAR_ID_RANGES = {
-  '2006': { min: 1, max: 20000 },
-  '2007': { min: 20001, max: 200000 },
-  '2008': { min: 200001, max: 1500000 },
-  '2009': { min: 1500001, max: 5000000 },
-  '2010': { min: 5000001, max: 13000000 },
-  '2011': { min: 13000001, max: 25000000 },
-  '2012': { min: 25000001, max: 40000000 },
-  '2013': { min: 40000001, max: 60000000 },
-  '2014': { min: 60000001, max: 80000000 },
-  '2015': { min: 80000001, max: 110000000 },
-  '2016': { min: 110000001, max: 180000000 }
+  '2006': { min: 1, max: 30000 },
+  '2007': { min: 30001, max: 400000 },
+  '2008': { min: 400001, max: 2500000 },
+  '2009': { min: 2500001, max: 9000000 },
+  '2010': { min: 9000001, max: 20000000 },
+  '2011': { min: 20000001, max: 40000000 },
+  '2012': { min: 40000001, max: 65000000 },
+  '2013': { min: 65000001, max: 100000000 },
+  '2014': { min: 100000001, max: 140000000 },
+  '2015': { min: 140000001, max: 200000000 },
+  '2016': { min: 200000001, max: 300000000 }
 };
 
 const commands = [
@@ -71,7 +72,6 @@ client.once('clientReady', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    // 1. /gen Command
     if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
       const lastUsed = cooldowns.get(interaction.user.id);
       const now = Date.now();
@@ -103,7 +103,6 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // 2. Year Selection
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
       const ownerId = interaction.customId.split('_')[2];
 
@@ -136,7 +135,6 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // 3. Button Click & Generation
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
       const filterType = `${parts[1]}_${parts[2]}`;
@@ -147,13 +145,12 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.reply({ content: '❌ These buttons are not for you! Run `/gen` to start your own.', flags: 64 });
       }
 
-      // Anında yanıt vererek 3 saniyelik zaman aşımını engelle
       await interaction.deferUpdate();
       cooldowns.set(interaction.user.id, Date.now());
       await interaction.editReply({ content: '⚡ **Scanning Roblox network at maximum speed...**', components: [] });
 
       try {
-        const accountData = await ultraFastRobloxSearch(targetYear, filterType);
+        const accountData = await smartRobloxSearch(targetYear, filterType);
 
         if (!accountData) {
           return await interaction.followUp({ content: '❌ Could not find a matching account in time. Please try again!', flags: 64 });
@@ -191,28 +188,32 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Optimized Search with Max Attempts to Prevent Infinite Loops
-async function ultraFastRobloxSearch(targetYear, filterType) {
+// Akıllı & Hızlı Roblox Tarayıcı
+async function smartRobloxSearch(targetYear, filterType) {
   const range = YEAR_ID_RANGES[targetYear] || { min: 1, max: 50000000 };
   let attempts = 0;
-  const maxAttempts = 10; // Maksimum 10 tur (300 istek) tara
+  const maxAttempts = 25; 
 
   while (attempts < maxAttempts) {
     attempts++;
-    const batch = Array.from({ length: 20 }, () => 
+    
+    // Her turda 15 rastgele ID kontrol et
+    const batch = Array.from({ length: 15 }, () => 
       Math.floor(Math.random() * (range.max - range.min + 1)) + range.min
     );
 
     const promises = batch.map(async (userId) => {
       try {
-        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 2500 });
+        const res = await axios.get(`https://users.roblox.com/v1/users/${userId}`, { timeout: 2000 });
         const data = res.data;
-        const accountYear = new Date(data.created).getFullYear().toString();
+        if (!data || !data.created) return null;
 
+        const accountYear = new Date(data.created).getFullYear().toString();
         if (accountYear !== targetYear) return null;
 
         const username = data.name;
 
+        // Filtre Kuralları
         if (filterType === 'no_number' && /\d/.test(username)) return null;
         if (filterType === 'year_user' && !/(19\d{2}|20\d{2})/.test(username)) return null;
         if (filterType === 'double_user' && !/(\d{2})\1/.test(username)) return null;
@@ -248,6 +249,9 @@ async function ultraFastRobloxSearch(targetYear, filterType) {
         avatarUrl: avatarData
       };
     }
+
+    // Rate Limit engeline takılmamak için turlar arası ufak bir gecikme (150ms)
+    await new Promise(resolve => setTimeout(resolve, 150));
   }
   return null;
 }
@@ -255,14 +259,12 @@ async function ultraFastRobloxSearch(targetYear, filterType) {
 // RAP Scanner
 async function getRAPValue(userId) {
   try {
-    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 2500 });
+    const res = await axios.get(`https://inventory.roblox.com/v1/users/${userId}/assets/collectibles?assetType=Hat&limit=100`, { timeout: 2000 });
     const items = res.data.data || [];
-    
     let totalRAP = 0;
     items.forEach(item => {
       totalRAP += (item.recentAveragePrice || 0);
     });
-
     return totalRAP.toString();
   } catch {
     return '0';
@@ -272,7 +274,7 @@ async function getRAPValue(userId) {
 // Headshot Avatar URL Fetcher
 async function getAvatarUrl(userId) {
   try {
-    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 2500 });
+    const res = await axios.get(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`, { timeout: 2000 });
     return res.data.data[0]?.imageUrl || `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
   } catch {
     return `https://www.roblox.com/headshot-thumbnail/image?userId=${userId}&width=150&height=150&format=png`;
