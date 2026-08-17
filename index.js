@@ -16,16 +16,14 @@ const path = require('path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
-// Render.com Environment Variables bağlantısı
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const DB_FILE = path.join(__dirname, 'accounts.json');
-const ROLE_ID = '1538940771967700992'; // Bulk-Gen Rol ID
+const ROLE_ID = '1538940771967700992';
 
 const userGenCount = new Map();
 
-// JSON Veritabanı Yardımcıları
 function getDB() {
   if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
   try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (e) { return {}; }
@@ -83,6 +81,8 @@ client.on('interactionCreate', async (interaction) => {
 
   // --- /gen KOMUTU ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`select_year_${interaction.user.id}`)
       .setPlaceholder('Select Account Creation Year (2006 - 2016)')
@@ -91,7 +91,7 @@ client.on('interactionCreate', async (interaction) => {
         return { label: year, value: year, description: `Accounts created in ${year}` };
       }));
 
-    await interaction.reply({
+    await interaction.editReply({
       content: 'Please select the creation year for the account:',
       components: [new ActionRowBuilder().addComponents(yearSelect)]
     });
@@ -99,8 +99,10 @@ client.on('interactionCreate', async (interaction) => {
 
   // --- /bulk-gen KOMUTU ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') {
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
     if (!interaction.member.roles.cache.has(ROLE_ID)) {
-      return await interaction.reply({ content: '❌ You need the **Bulk-Gen Customer** role to use this command.', ephemeral: true });
+      return await interaction.editReply({ content: '❌ You need the **Bulk-Gen Customer** role to use this command.' });
     }
 
     const row = new ActionRowBuilder().addComponents(
@@ -108,7 +110,7 @@ client.on('interactionCreate', async (interaction) => {
       new ButtonBuilder().setCustomId(`bulk_amt_10_${interaction.user.id}`).setLabel('10 Accounts').setStyle(ButtonStyle.Success)
     );
 
-    await interaction.reply({ content: 'Select amount to generate:', components: [row], ephemeral: true });
+    await interaction.editReply({ content: 'Select amount to generate:', components: [row] });
   }
 
   // --- /bulk-gen Miktar Seçimi ---
@@ -232,7 +234,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.user.id !== ownerId) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
     const key = `${targetYear}_${filterType}`;
     const db = getDB();
@@ -251,6 +253,31 @@ client.on('interactionCreate', async (interaction) => {
 
     const embed = new EmbedBuilder()
       .setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
+      .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+      .setColor('#2B2D31')
+      .setThumbnail(accountData.avatarUrl)
+      .addFields(
+        { name: '👤 Username', value: `\`${accountData.name}\``, inline: true },
+        { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+        { name: '🛡️ Status', value: accountData.isBanned ? '❌ Banned' : '✅ Active', inline: true },
+        { name: '🌐 Last Online', value: `\`${accountData.lastOnline}\``, inline: true },
+        { name: '🎒 Inventory / Items', value: `\`${accountData.inventoryInfo}\``, inline: false }
+      )
+      .setImage(accountData.avatarUrl)
+      .setFooter({ text: `RadarBlox Generator • Total Generations by you: ${currentCount}` })
+      .setTimestamp();
+
+    try {
+      await interaction.user.send({ embeds: [embed] });
+      await interaction.editReply({ content: '✅ Account generated! Check your DMs.' });
+    } catch (e) {
+      await interaction.editReply({ content: '❌ Please open your DMs!' });
+    }
+  }
+});
+
+client.login(TOKEN);
+setTitle(`✨ RADARBLOX PREMIUM ACCOUNT GENERATED`)
       .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
       .setColor('#2B2D31')
       .setThumbnail(accountData.avatarUrl)
