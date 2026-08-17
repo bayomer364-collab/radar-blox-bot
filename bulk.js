@@ -9,7 +9,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 
-const ROLE_ID = 'BURAYA_ROL_ID_YAZ'; // "Bulk-Gen Customer" rol ID'sini buraya yaz
+const ROLE_ID = '1538940771967700992'; // "Bulk-Gen Customer" rol ID'sini buraya yaz
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 function getDB() {
