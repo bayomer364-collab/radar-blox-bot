@@ -1,11 +1,10 @@
 const https = require('https');
 
-console.log('[DEBUG] generator.js dosyası başarıyla yüklendi ve çalışıyor!');
+console.log('[DEBUG] generator.js dosyası başarıyla yüklendi ve çalışıyor (Batch Mode)!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
-// 2010 - 2015 arasındaki tüm yılları kapsayan ID aralıkları
 const YEAR_ID_RANGES = {
   '2010': { min: 5000001, max: 13000000 },
   '2011': { min: 13000001, max: 25000000 },
@@ -16,9 +15,7 @@ const YEAR_ID_RANGES = {
 };
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
-const FILTERS = ['no_number_user', 'year_user', 'double_user'];
-
-let filterIndex = 0;
+const FILTERS = ['year_user', 'double_user'];
 
 function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -33,7 +30,7 @@ function fetchJSON(url) {
         try { resolve({ status: res.statusCode, data: JSON.parse(data) }); } 
         catch (e) { resolve({ status: res.statusCode, data: null }); }
       });
-    }).on('error', (err) => {
+    }).on('error', () => {
       resolve({ status: 500, data: null });
     });
   });
@@ -42,9 +39,6 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username, filterType) {
   if (/_/.test(username)) return false;
 
-  if (filterType === 'no_number_user') {
-    return !/\d/.test(username);
-  }
   if (filterType === 'year_user') {
     return /(19\d{2}|20\d{2})/.test(username);
   }
@@ -55,10 +49,9 @@ function validateUsernameByFilter(username, filterType) {
   return false;
 }
 
-async function scanRandomRobloxAccount() {
+async function checkSingleAccount() {
   const targetYear = getRandom(YEARS);
-  const targetFilter = FILTERS[filterIndex];
-  filterIndex = (filterIndex + 1) % FILTERS.length;
+  const targetFilter = getRandom(FILTERS);
 
   const range = YEAR_ID_RANGES[targetYear];
   const randomUserId = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
@@ -66,8 +59,7 @@ async function scanRandomRobloxAccount() {
   const res = await fetchJSON(`https://users.roblox.com/v1/users/${randomUserId}`);
   
   if (res.status === 429) {
-    console.log('[RATE LIMIT] Roblox rate limit exceeded!');
-    return;
+    return; // Rate limit durumunda sessizce geç
   }
 
   if (!res.data || !res.data.name) return;
@@ -125,8 +117,15 @@ async function scanRandomRobloxAccount() {
   console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${targetFilter}`);
 }
 
-// 3.5 saniye aralıkla taramaya devam eder
-setInterval(() => {
-  scanRandomRobloxAccount().catch((err) => console.error('[SCAN ERROR]:', err));
-}, 3500);
-  
+// Her döngüde aynı anda 3 farklı istek atarak tarama hızını katlar
+setInterval(async () => {
+  try {
+    await Promise.all([
+      checkSingleAccount(),
+      checkSingleAccount(),
+      checkSingleAccount()
+    ]);
+  } catch (err) {
+    console.error('[BATCH SCAN ERROR]:', err);
+  }
+}, 2000);
