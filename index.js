@@ -37,12 +37,13 @@ const CLIENT_ID = '1538484436272676954';
 const userGenCount = new Map();
 const cooldowns = new Map();
 
-// Egzotik ve Çeşitli Kelime / İsim Havuzu
+// Genişletilmiş İsim / Kelime Havuzu
 const BASE_NAMES = [
   'andrew', 'anton', 'alex', 'shadow', 'viper', 'dragon', 'ghost', 'phantom',
   'blaze', 'storm', 'frost', 'knight', 'legend', 'master', 'nexus', 'cyber',
   'matrix', 'kestrel', 'valkyrie', 'dominus', 'sparkle', 'noble', 'solar',
-  'lunar', 'zenith', 'vortex', 'specter', 'titan', 'reaper', 'hunter', 'rogue'
+  'lunar', 'zenith', 'vortex', 'specter', 'titan', 'reaper', 'hunter', 'rogue',
+  'hero', 'sketch', 'stampy', 'denis', 'build', 'dan', 'mike', 'john', 'chris'
 ];
 
 const commands = [
@@ -141,8 +142,15 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferUpdate();
       cooldowns.set(interaction.user.id, Date.now());
 
-      const generatedUsername = generateExoticName(filterType, targetYear);
-      const accountInfo = await fetchRobloxUserInfo(generatedUsername, targetYear);
+      // Sadece GERÇEK ve Doğru Yıl Olan Hesabı Bulma Döngüsü
+      const accountInfo = await findValidRobloxAccount(filterType, targetYear);
+
+      if (!accountInfo) {
+        await interaction.user.send({ 
+          content: `❌ Could not find a valid account matching pattern **${filterType}** for year **${targetYear}** after multiple attempts. Please try again!` 
+        });
+        return await interaction.deleteReply().catch(() => {});
+      }
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
@@ -171,7 +179,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// Egzotik İsim Üretici Algoritma
+// İsim Formatlandırma
 function generateExoticName(filterType, year) {
   const baseName = BASE_NAMES[Math.floor(Math.random() * BASE_NAMES.length)];
 
@@ -181,22 +189,23 @@ function generateExoticName(filterType, year) {
 
   if (filterType === 'year_user') {
     const patterns = [
-      `${baseName}${year}${Math.floor(Math.random() * 90 + 10)}`, // andrew199831
-      `${year}${baseName}`,                                      // 2001andrew
-      `${baseName}${year}${year}`                                // andrew19981998
+      `${baseName}${year}`,
+      `${baseName}${year}${Math.floor(Math.random() * 90 + 10)}`,
+      `${year}${baseName}`,
+      `${baseName}${year}${year}`
     ];
     return patterns[Math.floor(Math.random() * patterns.length)];
   }
 
   if (filterType === 'double_user') {
-    const doubleDigits = ['909090', '5050', '1212', '8080', '7070', '3030', '1122'];
+    const doubleDigits = ['909090', '5050', '1212', '8080', '7070', '3030', '1122', '44', '55', '66', '77', '88', '99'];
     const selectedDouble = doubleDigits[Math.floor(Math.random() * doubleDigits.length)];
 
     const patterns = [
-      `${baseName}${selectedDouble}`,                            // anton909090
-      `${selectedDouble}${baseName}${selectedDouble}`,          // 5050anton5050
-      `${baseName}${selectedDouble.slice(0, 4)}`,                // anton1212
-      `${selectedDouble.slice(0, 4)}${baseName}`                 // 8080anton
+      `${baseName}${selectedDouble}`,
+      `${selectedDouble}${baseName}${selectedDouble}`,
+      `${baseName}${selectedDouble.slice(0, 4)}`,
+      `${selectedDouble.slice(0, 4)}${baseName}`
     ];
     return patterns[Math.floor(Math.random() * patterns.length)];
   }
@@ -204,47 +213,51 @@ function generateExoticName(filterType, year) {
   return `${baseName}${year}`;
 }
 
-// Roblox Kullanıcı Bilgisi Çekici
-async function fetchRobloxUserInfo(username, fallbackYear) {
-  try {
-    const res = await axios.post('https://users.roblox.com/v1/usernames/users', {
-      usernames: [username],
-      excludeBannedUsers: false
-    }, { timeout: 3000 });
+// Gerçek Hesap Arama Döngüsü
+async function findValidRobloxAccount(filterType, targetYear) {
+  const maxAttempts = 20;
 
-    if (res.data && res.data.data && res.data.data.length > 0) {
-      const user = res.data.data[0];
-      const userDetail = await axios.get(`https://users.roblox.com/v1/users/${user.id}`, { timeout: 3000 });
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const candidateName = generateExoticName(filterType, targetYear);
+    
+    try {
+      const res = await axios.post('https://users.roblox.com/v1/usernames/users', {
+        usernames: [candidateName],
+        excludeBannedUsers: false
+      }, { timeout: 2500 });
 
-      const formattedDate = new Date(userDetail.data.created).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      });
+      if (res.data && res.data.data && res.data.data.length > 0) {
+        const user = res.data.data[0];
+        const userDetail = await axios.get(`https://users.roblox.com/v1/users/${user.id}`, { timeout: 2500 });
 
-      return {
-        id: user.id,
-        name: userDetail.data.name,
-        createdDate: formattedDate,
-        isBanned: userDetail.data.isBanned || false,
-        isVerified: userDetail.data.hasVerifiedBadge || false,
-        rapValue: '0',
-        avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${user.id}&width=150&height=150&format=png`
-      };
+        const createdDateObj = new Date(userDetail.data.created);
+        const createdYear = createdDateObj.getFullYear().toString();
+
+        // SADECE VE SADECE seçilen yıl ile Roblox'taki gerçek açılış yılı birebir tutuyorsa kabul et!
+        if (createdYear === targetYear) {
+          const formattedDate = createdDateObj.toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+          });
+
+          return {
+            id: user.id,
+            name: userDetail.data.name,
+            createdDate: formattedDate,
+            isBanned: userDetail.data.isBanned || false,
+            isVerified: userDetail.data.hasVerifiedBadge || false,
+            rapValue: '0',
+            avatarUrl: `https://www.roblox.com/headshot-thumbnail/image?userId=${user.id}&width=150&height=150&format=png`
+          };
+        }
+      }
+    } catch (e) {
+      // Hata alırsa sonraki denemeye geç
     }
-  } catch (e) {
-    // Hata durumunda güvenli yedek
   }
 
-  return {
-    id: '123456',
-    name: username,
-    createdDate: `January 15, ${fallbackYear}`,
-    isBanned: false,
-    isVerified: false,
-    rapValue: '0',
-    avatarUrl: 'https://tr.rbxcdn.com/30day-avatar-headshot'
-  };
+  return null;
 }
 
 process.on('unhandledRejection', (reason, promise) => {
