@@ -5,18 +5,14 @@ console.log('[DEBUG] generator.js dosyası başarıyla yüklendi ve çalışıyo
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
+// 2010 - 2015 arasındaki tüm yılları kapsayan ID aralıkları
 const YEAR_ID_RANGES = {
-  '2006': { min: 1, max: 20000 },
-  '2007': { min: 20001, max: 200000 },
-  '2008': { min: 200001, max: 1500000 },
-  '2009': { min: 1500001, max: 5000000 },
   '2010': { min: 5000001, max: 13000000 },
   '2011': { min: 13000001, max: 25000000 },
   '2012': { min: 25000001, max: 40000000 },
   '2013': { min: 40000001, max: 60000000 },
   '2014': { min: 60000001, max: 80000000 },
-  '2015': { min: 80000001, max: 110000000 },
-  '2016': { min: 110000001, max: 180000000 }
+  '2015': { min: 80000001, max: 110000000 }
 };
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
@@ -70,7 +66,7 @@ async function scanRandomRobloxAccount() {
   const res = await fetchJSON(`https://users.roblox.com/v1/users/${randomUserId}`);
   
   if (res.status === 429) {
-    console.log('[RATE LIMIT] Roblox istek sınırı aşıldı!');
+    console.log('[RATE LIMIT] Roblox rate limit exceeded!');
     return;
   }
 
@@ -118,18 +114,19 @@ async function scanRandomRobloxAccount() {
     let responseData = '';
     webhookRes.on('data', chunk => responseData += chunk);
     webhookRes.on('end', () => {
-      console.log(`[WEBHOOK YANITI] Durum: ${webhookRes.statusCode}, Cevap: ${responseData}`);
+      console.log(`[WEBHOOK RESPONSE] Status: ${webhookRes.statusCode}, Answer: ${responseData}`);
     });
   });
 
-  req.on('error', (err) => console.error('[WEBHOOK HATA]:', err.message));
+  req.on('error', (err) => console.error('[WEBHOOK ERROR]:', err.message));
   req.write(payload);
   req.end();
 
-  console.log(`[GERÇEK HESAP BULUNDU] ${username} (${accountYear}) - Filtre: ${targetFilter}`);
+  console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${targetFilter}`);
 }
 
-// Her 1 saniyede bir tarama yapması için başlatıldı
+// 3.5 saniye aralıkla taramaya devam eder
 setInterval(() => {
-  scanRandomRobloxAccount().catch((err) => console.error('[TARAMA HATA]:', err));
-}, 3000);
+  scanRandomRobloxAccount().catch((err) => console.error('[SCAN ERROR]:', err));
+}, 3500);
+  
