@@ -24,6 +24,10 @@ const ROLE_ID = '1538940771967700992';
 
 const userGenCount = new Map();
 
+// Spam Engeli için Cooldown Map (10 Saniye)
+const cooldowns = new Map();
+const COOLDOWN_TIME = 10 * 1000;
+
 function getDB() {
   if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
   try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (e) { return {}; }
@@ -78,14 +82,34 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  try {
-    if (interaction.isChatInputCommand()) {
-      await interaction.deferReply({ ephemeral: true }).catch(() => {});
-    } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      await interaction.deferUpdate().catch(() => {});
+  
+  // --- 10 SANİYE SPAM ENGELİ & DEFER İŞLEMİ ---
+  if (interaction.isChatInputCommand()) {
+    const now = Date.now();
+    const userCooldown = cooldowns.get(interaction.user.id);
+
+    if (userCooldown && (now - userCooldown < COOLDOWN_TIME)) {
+      const remaining = ((COOLDOWN_TIME - (now - userCooldown)) / 1000).toFixed(1);
+      return await interaction.reply({
+        content: `⏱️ Please wait **${remaining}s** before using generator commands again.`,
+        ephemeral: true
+      });
     }
-  } catch (err) {
-    console.error('Defer hatası:', err);
+
+    cooldowns.set(interaction.user.id, now);
+    
+    // Herkese açık yanıt için ephemeral false yapıldı
+    try {
+      await interaction.deferReply({ ephemeral: false }).catch(() => {});
+    } catch (err) {
+      console.error('Defer hatası:', err);
+    }
+  } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
+    try {
+      await interaction.deferUpdate().catch(() => {});
+    } catch (err) {
+      console.error('Defer hatası:', err);
+    }
   }
 
   // --- /gen KOMUTU ---
@@ -124,7 +148,10 @@ client.on('interactionCreate', async (interaction) => {
     const amount = parts[2];
     const ownerId = parts[3];
 
-    if (interaction.user.id !== ownerId) return;
+    // YETKİSİZ TIKLAMA ENGELİ
+    if (interaction.user.id !== ownerId) {
+      return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
+    }
 
     const yearSelect = new StringSelectMenuBuilder()
       .setCustomId(`bulk_year_${amount}_${interaction.user.id}`)
@@ -146,7 +173,10 @@ client.on('interactionCreate', async (interaction) => {
     const amount = parts[2];
     const ownerId = parts[3];
 
-    if (interaction.user.id !== ownerId) return;
+    // YETKİSİZ TIKLAMA ENGELİ
+    if (interaction.user.id !== ownerId) {
+      return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
+    }
 
     const selectedYear = interaction.values[0];
     const row = new ActionRowBuilder().addComponents(
@@ -166,7 +196,10 @@ client.on('interactionCreate', async (interaction) => {
     const amount = parseInt(parts[5]);
     const ownerId = parts[6];
 
-    if (interaction.user.id !== ownerId) return;
+    // YETKİSİZ TIKLAMA ENGELİ
+    if (interaction.user.id !== ownerId) {
+      return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
+    }
 
     const key = `${targetYear}_${filterType}`;
     const db = getDB();
@@ -217,7 +250,11 @@ client.on('interactionCreate', async (interaction) => {
   // --- /gen Yıl Seçimi ---
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
     const ownerId = interaction.customId.split('_')[2];
-    if (interaction.user.id !== ownerId) return;
+    
+    // YETKİSİZ TIKLAMA ENGELİ
+    if (interaction.user.id !== ownerId) {
+      return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
+    }
 
     const selectedYear = interaction.values[0];
     const row = new ActionRowBuilder().addComponents(
@@ -236,7 +273,10 @@ client.on('interactionCreate', async (interaction) => {
     const targetYear = parts[3];
     const ownerId = parts[4];
 
-    if (interaction.user.id !== ownerId) return;
+    // YETKİSİZ TIKLAMA ENGELİ
+    if (interaction.user.id !== ownerId) {
+      return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
+    }
 
     const key = `${targetYear}_${filterType}`;
     const db = getDB();
@@ -282,4 +322,4 @@ client.on('interactionCreate', async (interaction) => {
 
 require('./generator.js');
 client.login(TOKEN);
-      
+           
