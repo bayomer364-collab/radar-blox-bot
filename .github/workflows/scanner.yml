@@ -1,0 +1,23 @@
+name: Roblox Account Scanner
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # Her 15 dakikada bir otomatik çalışır
+  workflow_dispatch: # İstersen GitHub panelinden tek tıkla manuel başlatabilirsin
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Generator
+        run: node generator.js
+        env:
+          WEBHOOK_SECRET: 'GIZLI_SIFRE_12345'
