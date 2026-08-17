@@ -177,7 +177,6 @@ client.on('interactionCreate', async (interaction) => {
 
     const selectedYear = interaction.values[0];
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`bulk_gen_no_number_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('no_number_user').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`bulk_gen_year_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('year_user').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`bulk_gen_double_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
     );
@@ -254,7 +253,6 @@ client.on('interactionCreate', async (interaction) => {
 
     const selectedYear = interaction.values[0];
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`gen_no_number_${selectedYear}_${interaction.user.id}`).setLabel('no_number_user').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`).setLabel('year_user').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
     );
@@ -318,4 +316,4 @@ client.on('interactionCreate', async (interaction) => {
 
 require('./generator.js');
 client.login(TOKEN);
-  
+        
