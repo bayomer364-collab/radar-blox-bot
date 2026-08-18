@@ -15,12 +15,10 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-// Prevent bot crashes due to unhandled promise rejections
 process.on('unhandledRejection', error => {
   console.error('Unhandled promise rejection:', error);
 });
 
-// Intents fix for online status
 const client = new Client({ 
   intents: [
     GatewayIntentBits.Guilds, 
@@ -29,7 +27,6 @@ const client = new Client({
   ] 
 });
 
-// Configs
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -37,12 +34,9 @@ const ROLE_ID = '1538940771967700992';
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 const userGenCount = new Map();
-
-// Separate Cooldowns (/gen: 25s, /bulk-gen: 50s)
 const cooldownsGen = new Map();
 const cooldownsBulk = new Map();
 
-// --- MEMORY DB SETUP ---
 let memoryDB = {};
 
 if (fs.existsSync(DB_FILE)) {
@@ -59,64 +53,8 @@ function getDB() {
 
 function saveDB() {
   fs.writeFile(DB_FILE, JSON.stringify(memoryDB, null, 2), 'utf8', (err) => {
-    if (err) {
-      console.error('Kayıt hatası:', err);
-    }
+    if (err) console.error('Kayıt hatası:', err);
   });
-}
-
-function fetchJSON(url) {
-  return new Promise((resolve) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve({ status: res.statusCode, data: JSON.parse(data) }); } 
-        catch (e) { resolve({ status: res.statusCode, data: null }); }
-      });
-    }).on('error', () => {
-      resolve({ status: 500, data: null });
-    });
-  });
-}
-
-function validateUsernameByFilter(username, filterType) {
-  if (/_/.test(username)) return null;
-
-  switch (filterType) {
-    case 'cross_user': {
-      const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
-      if (crossMatch && username.length > crossMatch[1].length * 2) return true;
-      break;
-    }
-    case 'double_user': {
-      if (/(\d{2})\1/.test(username)) return true;
-      break;
-    }
-    case 'year_user': {
-      if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)$/.test(username) || /(19\d{2}|20\d{2})/.test(username)) return true;
-      break;
-    }
-    case '123_method': {
-      if (/^123|123$/.test(username)) return true;
-      break;
-    }
-    case '321_method': {
-      if (/^321|321$/.test(username)) return true;
-      break;
-    }
-    case '2_number_method': {
-      const digits = username.match(/\d/g);
-      if (digits && digits.length === 2) return true;
-      break;
-    }
-    case '4_number_method': {
-      const digits = username.match(/\d/g);
-      if (digits && digits.length === 4) return true;
-      break;
-    }
-  }
-  return false;
 }
 
 // 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER
@@ -187,13 +125,6 @@ const commands = [
 
 client.once('ready', async () => {
   console.log(`${client.user.tag} is online and ready!`);
-  
-  // Botun Discord'da çevrim içi (yeşil) görünmesini zorunlu kılan kısım
-  client.user.setPresence({
-    status: 'online',
-    activities: [{ name: 'RadarBlox', type: 0 }]
-  });
-
   try {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
@@ -456,7 +387,7 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /gen Account Generation Process (Stock + Live Fallback Scan) ---
+    // --- /gen Account Generation Process (Stock Only) ---
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
@@ -493,57 +424,13 @@ client.on('interactionCreate', async (interaction) => {
       const db = getDB();
       const stock = db[key] || [];
 
-      let accountData = null;
-
-      if (stock.length > 0) {
-        accountData = stock.shift();
-        db[key] = stock;
-        saveDB();
-      } else {
-        await interaction.editReply({ content: `🔄 Single-gen pool is empty! Scanning live for ${targetYear} - ${filterType}...` });
-
-        const baseIdMap = {
-          '2006': 100000, '2007': 500000, '2008': 1500000, '2009': 3000000,
-          '2010': 5000001, '2011': 13000001, '2012': 25000001, '2013': 40000001,
-          '2014': 60000001, '2015': 80000001, '2016': 110000000
-        };
-
-        let startId = baseIdMap[targetYear] || 5000000;
-        let found = false;
-
-        for (let i = 0; i < 25; i++) {
-          const testId = startId + Math.floor(Math.random() * 5000);
-          const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
-
-          if (res.status === 429) break;
-          if (!res.data || !res.data.name) continue;
-
-          const userDetails = res.data;
-          const createdDate = new Date(userDetails.created);
-          const accountYear = createdDate.getFullYear().toString();
-
-          if (accountYear === targetYear && validateUsernameByFilter(userDetails.name, filterType)) {
-            const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
-            const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
-
-            accountData = {
-              id: userDetails.id.toString(),
-              name: userDetails.name,
-              createdDate: userDetails.created.split('T')[0],
-              isBanned: userDetails.isBanned || false,
-              lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
-              inventoryInfo: 'Public',
-              avatarUrl: avatarUrl
-            };
-            found = true;
-            break;
-          }
-        }
-
-        if (!found || !accountData) {
-          return await interaction.editReply({ content: `❌ Could not find an account matching ${targetYear} - ${filterType} live. Please try again later or wait for generator stock.` });
-        }
+      if (stock.length === 0) {
+        return await interaction.editReply({ content: `❌ Stock is empty for **${targetYear} - ${filterType}**. Please wait for the generator to add new accounts.`, components: [] });
       }
+
+      const accountData = stock.shift();
+      db[key] = stock;
+      saveDB();
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
@@ -570,7 +457,9 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.user.send({ embeds: [embed] });
         await interaction.editReply({ content: '✅ Accounts successfully sent to your DMs!', components: [] });
       } catch (e) {
-        await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
+        db[key].unshift(accountData); // Hata olursa stoku geri ekle
+        saveDB();
+        return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
       }
     }
 
@@ -586,7 +475,6 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// TOKEN KONTROLÜ VE BAĞLANTI
 if (!TOKEN) {
   console.error("KRİTİK HATA: DISCORD_TOKEN tanımlı değil veya boş!");
 } else {
