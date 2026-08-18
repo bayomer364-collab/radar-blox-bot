@@ -198,7 +198,6 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    // 3 Saniye kuralını aşmak için TÜM etkileşimleri anında defer ediyoruz (Gizli yanıt olarak)
     if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
@@ -588,6 +587,6 @@ if (!TOKEN) {
   client.login(TOKEN)
     .then(() => console.log("Discord login başarılı!"))
     .catch(err => {
-      console.error("DISCORD BAĞLANTI HATASI (Token veya Yetki Hatası):", err.message);
+      console.error("DISCORD BAĞLANTI HATASI:", err.message);
     });
 }
