@@ -32,14 +32,16 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   if (/_/.test(username)) return null;
   
+  // Orijinal script ve cross_user mantığı
   const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
   if (crossMatch && username.length > crossMatch[1].length * 2) return 'cross_user';
   
-  // Gelişmiş year_user kontrolü: (isim2014, isim19981998, isim20007, isim200131 vb.)
+  // Klasik ve çeşitli year_user kombinasyonları (isim2014, isim19981998, isim20007 vb.)
   if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)$/.test(username) || /(19\d{2}|20\d{2})/.test(username)) {
     return 'year_user';
   }
   
+  // double_user kontrolü
   if (/(\d{2})\1/.test(username)) return 'double_user';
   
   return null;
