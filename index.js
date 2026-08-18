@@ -38,7 +38,6 @@ const cooldownsBulk = new Map();
 // --- MEMORY DB SETUP ---
 let memoryDB = {};
 
-// Bot açılırken verileri bir kere RAM'e yükle
 if (fs.existsSync(DB_FILE)) {
   try { 
     memoryDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); 
@@ -74,24 +73,50 @@ function fetchJSON(url) {
   });
 }
 
+// Resimdeki Yeni ve Genişletilmiş Metod Doğrulama Mantığı
 function validateUsernameByFilter(username, filterType) {
   if (/_/.test(username)) return null;
-  if (filterType === 'cross_user') {
-    const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
-    if (crossMatch && username.length > crossMatch[1].length * 2) return true;
-  } else if (filterType === 'year_user') {
-    if (/(19\d{2}|20\d{2})/.test(username)) return true;
-  } else if (filterType === 'double_user') {
-    if (/(\d{2})\1/.test(username)) return true;
+
+  switch (filterType) {
+    case 'cross_user': {
+      const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
+      if (crossMatch && username.length > crossMatch[1].length * 2) return true;
+      break;
+    }
+    case 'double_user': {
+      if (/(\d{2})\1/.test(username)) return true;
+      break;
+    }
+    case 'year_user': {
+      if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)$/.test(username) || /(19\d{2}|20\d{2})/.test(username)) return true;
+      break;
+    }
+    case '123_method': {
+      if (/^123|123$/.test(username)) return true;
+      break;
+    }
+    case '321_method': {
+      if (/^321|321$/.test(username)) return true;
+      break;
+    }
+    case '2_number_method': {
+      const digits = username.match(/\d/g);
+      if (digits && digits.length === 2) return true;
+      break;
+    }
+    case '4_number_method': {
+      const digits = username.match(/\d/g);
+      if (digits && digits.length === 4) return true;
+      break;
+    }
   }
   return false;
 }
 
-// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER (Render Uyumlu - Dual Stock System)
+// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER
 const app = express();
 app.use(express.json());
 
-// Render'ın botu "ölü" sanıp restart atmasını önleyen Health Check endpoint'i
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
@@ -106,8 +131,6 @@ app.post('/api/add-account', (req, res) => {
   }
 
   const db = getDB();
-  
-  // Gelen hesabı hem /gen (gen_) hem de /bulk-gen (bulk_) havuzuna ayrı ayrı kaydediyoruz
   const genKey = `gen_${targetYear}_${filterType}`;
   const bulkKey = `bulk_${targetYear}_${filterType}`;
 
@@ -188,7 +211,7 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
       const db = getDB();
       const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
-      const filterTypes = ['year_user', 'double_user', 'cross_user'];
+      const filterTypes = ['cross_user', 'double_user', 'year_user', '123_method', '321_method', '2_number_method', '4_number_method'];
 
       let genText = '';
       let bulkText = '';
@@ -207,8 +230,8 @@ client.on('interactionCreate', async (interaction) => {
         .setTitle('📊 Detailed Stock Status')
         .setColor('#2F3136')
         .addFields(
-          { name: '🔹 Gen Pool', value: genText, inline: true },
-          { name: '🔸 Bulk-Gen Pool', value: bulkText, inline: true }
+          { name: '🔹 Gen Pool', value: genText.slice(0, 1024), inline: true },
+          { name: '🔸 Bulk-Gen Pool', value: bulkText.slice(0, 1024), inline: true }
         )
         .setTimestamp();
 
@@ -280,13 +303,19 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       const selectedYear = interaction.values[0];
-      const row = new ActionRowBuilder().addComponents(
+      const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`bulk_gen_cross_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`bulk_gen_double_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`bulk_gen_year_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('year_user').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`bulk_gen_double_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`bulk_gen_123_method_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`bulk_gen_321_method_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`bulk_gen_2_number_method_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`bulk_gen_4_number_method_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
       );
 
-      return await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row] });
+      return await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row1, row2] });
     }
 
     // --- /bulk-gen Account Generation Process ---
@@ -302,11 +331,26 @@ client.on('interactionCreate', async (interaction) => {
         targetYear = parts[4];
         amount = parseInt(parts[5]);
         ownerId = parts[6];
-      } else {
-        filterType = `${parts[2]}_${parts[3]}`;
+      } else if (parts[2] === 'double' && parts[3] === 'user') {
+        filterType = 'double_user';
         targetYear = parts[4];
         amount = parseInt(parts[5]);
         ownerId = parts[6];
+      } else if (parts[2] === 'year' && parts[3] === 'user') {
+        filterType = 'year_user';
+        targetYear = parts[4];
+        amount = parseInt(parts[5]);
+        ownerId = parts[6];
+      } else if (parts[3] === 'method') {
+        filterType = `${parts[2]}_method`;
+        targetYear = parts[4];
+        amount = parseInt(parts[5]);
+        ownerId = parts[6];
+      } else if (parts[4] === 'method') {
+        filterType = `${parts[2]}_${parts[3]}_method`;
+        targetYear = parts[5];
+        amount = parseInt(parts[6]);
+        ownerId = parts[7];
       }
 
       if (interaction.user.id !== ownerId) {
@@ -368,15 +412,21 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
-      const row = new ActionRowBuilder().addComponents(
+      const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`gen_cross_user_${selectedYear}_${ownerId}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`gen_double_user_${selectedYear}_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`gen_year_user_${selectedYear}_${ownerId}`).setLabel('year_user').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`gen_double_user_${selectedYear}_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`gen_123_method_${selectedYear}_${ownerId}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`gen_321_method_${selectedYear}_${ownerId}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`gen_2_number_method_${selectedYear}_${ownerId}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`gen_4_number_method_${selectedYear}_${ownerId}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
       );
 
       return await interaction.editReply({ 
         content: `Selected Year: **${selectedYear}**\nNow, select a username pattern:`, 
-        components: [row] 
+        components: [row1, row2] 
       });
     }
 
@@ -391,10 +441,22 @@ client.on('interactionCreate', async (interaction) => {
         filterType = 'cross_user';
         targetYear = parts[3];
         ownerId = parts[4];
-      } else {
-        filterType = `${parts[1]}_${parts[2]}`;
+      } else if (parts[1] === 'double' && parts[2] === 'user') {
+        filterType = 'double_user';
         targetYear = parts[3];
         ownerId = parts[4];
+      } else if (parts[1] === 'year' && parts[2] === 'user') {
+        filterType = 'year_user';
+        targetYear = parts[3];
+        ownerId = parts[4];
+      } else if (parts[2] === 'method') {
+        filterType = `${parts[1]}_method`;
+        targetYear = parts[3];
+        ownerId = parts[4];
+      } else if (parts[3] === 'method') {
+        filterType = `${parts[1]}_${parts[2]}_method`;
+        targetYear = parts[4];
+        ownerId = parts[5];
       }
 
       if (interaction.user.id !== ownerId) {
@@ -408,12 +470,10 @@ client.on('interactionCreate', async (interaction) => {
       let accountData = null;
 
       if (stock.length > 0) {
-        // Önce stoktan al
         accountData = stock.shift();
         db[key] = stock;
         saveDB();
       } else {
-        // Stok yoksa anlık canlı tarama (Fallback Scan) başlat
         await interaction.editReply({ content: `🔄 Single-gen pool is empty! Scanning live for ${targetYear} - ${filterType}...` });
 
         const baseIdMap = {
