@@ -140,7 +140,7 @@ app.listen(PORT, '0.0.0.0', () => console.log(`Webhook server listening on port 
 const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Generate a single premium account.'),
   new SlashCommandBuilder().setName('bulk-gen').setDescription('Generate multiple premium accounts.'),
-  new SlashCommandBuilder().setName('stock').setDescription('Check current pool stocks.')
+  new SlashCommandBuilder().setName('stock').setDescription('Check current detailed pool stocks.')
 ];
 
 client.once('ready', async () => {
@@ -187,25 +187,28 @@ client.on('interactionCreate', async (interaction) => {
     // --- /stock COMMAND ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
       const db = getDB();
-      
-      let genTotal = 0;
-      let bulkTotal = 0;
+      const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
+      const filterTypes = ['year_user', 'double_user', 'cross_user'];
 
-      for (const [key, accounts] of Object.entries(db)) {
-        const count = Array.isArray(accounts) ? accounts.length : 0;
-        if (key.startsWith('gen_')) {
-          genTotal += count;
-        } else if (key.startsWith('bulk_')) {
-          bulkTotal += count;
+      let genText = '';
+      let bulkText = '';
+
+      for (const year of years) {
+        for (const filter of filterTypes) {
+          const genCount = (db[`gen_${year}_${filter}`] || []).length;
+          const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
+
+          genText += `• **${year}** ${filter}: \`${genCount}\`\n`;
+          bulkText += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
         }
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('📊 Current Stock Status')
+        .setTitle('📊 Detailed Stock Status')
         .setColor('#2F3136')
         .addFields(
-          { name: 'Gen', value: `\`${genTotal}\` account`, inline: true },
-          { name: 'Bulk-Gen', value: `\`${bulkTotal}\` account`, inline: true }
+          { name: '🔹 Gen Pool', value: genText, inline: true },
+          { name: '🔸 Bulk-Gen Pool', value: bulkText, inline: true }
         )
         .setTimestamp();
 
