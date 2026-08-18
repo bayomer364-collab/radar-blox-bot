@@ -29,20 +29,34 @@ function fetchJSON(url) {
   });
 }
 
+// Bot ile birebir aynı çalışan genişletilmiş doğrulama mantığı
 function validateUsernameByFilter(username) {
   if (/_/.test(username)) return null;
   
-  // Orijinal script ve cross_user mantığı
+  // 1. cross_user kontrolü
   const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
   if (crossMatch && username.length > crossMatch[1].length * 2) return 'cross_user';
   
-  // Klasik ve çeşitli year_user kombinasyonları (isim2014, isim19981998, isim20007 vb.)
+  // 2. year_user kontrolü
   if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)$/.test(username) || /(19\d{2}|20\d{2})/.test(username)) {
     return 'year_user';
   }
   
-  // double_user kontrolü
+  // 3. double_user kontrolü
   if (/(\d{2})\1/.test(username)) return 'double_user';
+
+  // 4. 123_method kontrolü
+  if (/^123|123$/.test(username)) return '123_method';
+
+  // 5. 321_method kontrolü
+  if (/^321|321$/.test(username)) return '321_method';
+
+  // 6. 2_number_method kontrolü
+  const digits = username.match(/\d/g);
+  if (digits && digits.length === 2) return '2_number_method';
+
+  // 7. 4_number_method kontrolü
+  if (digits && digits.length === 4) return '4_number_method';
   
   return null;
 }
