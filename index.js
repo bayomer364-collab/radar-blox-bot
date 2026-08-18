@@ -117,7 +117,6 @@ function validateUsernameByFilter(username, filterType) {
 const app = express();
 app.use(express.json());
 
-// UptimeRobot ve tarayıcılar için hem kök dizin (/) hem de /health endpoint'i eklendi
 app.get('/', (req, res) => {
   res.status(200).send('Bot aktif ve çalışıyor!');
 });
@@ -162,7 +161,19 @@ app.post('/api/add-account', (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Webhook server listening on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Webhook server listening on port ${PORT}`);
+
+  // Otomatik Kendini Uyandırma (Self-Ping) - Her 4 dakikada bir bot kendine istek atar
+  const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  setInterval(() => {
+    https.get(SELF_URL, (res) => {
+      res.on('data', () => {});
+    }).on('error', (err) => {
+      // Sessizce geç veya logla
+    });
+  }, 4 * 60 * 1000);
+});
 
 // 2. DISCORD BOT COMMANDS
 const commands = [
