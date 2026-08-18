@@ -478,10 +478,10 @@ client.on('interactionCreate', async (interaction) => {
 if (!TOKEN) {
   console.error("KRİTİK HATA: DISCORD_TOKEN tanımlı değil veya boş!");
 } else {
-  console.log("Discord'a bağlanılıyor...");
+  console.log("Discord'a bağlanılıyor... Token uzunluğu:", TOKEN.length);
   client.login(TOKEN)
     .then(() => console.log("Discord login başarılı!"))
     .catch(err => {
-      console.error("DISCORD BAĞLANTI HATASI:", err.message);
+      console.error("DISCORD BAĞLANTI HATASI DETAYI:", err);
     });
 }
