@@ -239,7 +239,7 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row] });
     }
 
-    // --- /bulk-gen Account Generation Process ---
+    // --- /bulk-gen Account Generation Process (Stoktan Yer) ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
@@ -330,7 +330,7 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /gen Account Generation Process (Hybrid: Stock + Instant Scan) ---
+    // --- /gen Account Generation Process (ASLA STOKTAN YEMEZ - SADECE ANLIK TARAMA) ---
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
@@ -351,60 +351,50 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
-      const key = `${targetYear}_${filterType}`;
-      const db = getDB();
-      const stock = db[key] || [];
+      await interaction.editReply({ content: `🔄 Scanning live for ${targetYear} - ${filterType} (Stock is reserved for bulk-gen)...` });
 
+      const baseIdMap = {
+        '2006': 100000, '2007': 500000, '2008': 1500000, '2009': 3000000,
+        '2010': 5000001, '2011': 13000001, '2012': 25000001, '2013': 40000001,
+        '2014': 60000001, '2015': 80000001, '2016': 110000000
+      };
+
+      let startId = baseIdMap[targetYear] || 5000000;
       let accountData = null;
+      let found = false;
 
-      if (stock.length > 0) {
-        accountData = stock.shift();
-        db[key] = stock;
-        saveDB();
-      } else {
-        await interaction.editReply({ content: `🔄 No ready stock found for ${targetYear} - ${filterType}, scanning instantly...` });
+      // Anlık tarama döngüsü
+      for (let i = 0; i < 25; i++) {
+        const testId = startId + Math.floor(Math.random() * 5000);
+        const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
 
-        const baseIdMap = {
-          '2006': 100000, '2007': 500000, '2008': 1500000, '2009': 3000000,
-          '2010': 5000001, '2011': 13000001, '2012': 25000001, '2013': 40000001,
-          '2014': 60000001, '2015': 80000001, '2016': 110000000
-        };
+        if (res.status === 429) break;
+        if (!res.data || !res.data.name) continue;
 
-        let startId = baseIdMap[targetYear] || 5000000;
-        let found = false;
+        const userDetails = res.data;
+        const createdDate = new Date(userDetails.created);
+        const accountYear = createdDate.getFullYear().toString();
 
-        for (let i = 0; i < 20; i++) {
-          const testId = startId + Math.floor(Math.random() * 5000);
-          const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
+        if (accountYear === targetYear && validateUsernameByFilter(userDetails.name, filterType)) {
+          const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
+          const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-          if (res.status === 429) break;
-          if (!res.data || !res.data.name) continue;
-
-          const userDetails = res.data;
-          const createdDate = new Date(userDetails.created);
-          const accountYear = createdDate.getFullYear().toString();
-
-          if (accountYear === targetYear && validateUsernameByFilter(userDetails.name, filterType)) {
-            const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
-            const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
-
-            accountData = {
-              id: userDetails.id.toString(),
-              name: userDetails.name,
-              createdDate: createdDate.toISOString().split('T')[0],
-              isBanned: userDetails.isBanned || false,
-              lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
-              inventoryInfo: 'Public',
-              avatarUrl: avatarUrl
-            };
-            found = true;
-            break;
-          }
+          accountData = {
+            id: userDetails.id.toString(),
+            name: userDetails.name,
+            createdDate: createdDate.toISOString().split('T')[0],
+            isBanned: userDetails.isBanned || false,
+            lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
+            inventoryInfo: 'Public',
+            avatarUrl: avatarUrl
+          };
+          found = true;
+          break;
         }
+      }
 
-        if (!found) {
-          return await interaction.editReply({ content: `❌ No account found during instant scan! Please try again later or wait for background stock to build up.`, components: [] });
-        }
+      if (!found) {
+        return await interaction.editReply({ content: `❌ No account found during instant scan! Please try again.`, components: [] });
       }
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
