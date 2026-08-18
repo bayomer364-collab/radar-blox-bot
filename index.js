@@ -41,7 +41,12 @@ function getDB() {
 }
 
 function saveDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    console.log('Stok güncellendi ve kaydedildi.');
+  } catch (err) {
+    console.error('Kayıt hatası:', err);
+  }
 }
 
 function fetchJSON(url) {
@@ -78,8 +83,10 @@ app.use(express.json());
 
 app.post('/api/add-account', (req, res) => {
   const { secret, targetYear, filterType, accountData } = req.body;
+  console.log('Webhook isteği alındı:', { targetYear, filterType, accountId: accountData?.id });
 
   if (secret !== WEBHOOK_SECRET) {
+    console.warn('Geçersiz webhook şifresi (Unauthorized)');
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
@@ -128,15 +135,15 @@ client.on('interactionCreate', async (interaction) => {
       if (lastUsed && (now - lastUsed < timeLimit)) {
         const remaining = ((timeLimit - (now - lastUsed)) / 1000).toFixed(1);
         return await interaction.reply({
-          content: `⏱️ Please wait **${remaining}s** before using this command again.`,
-          ephemeral: true
+          content: `⏱️ Please wait **${remaining}s** before using this command again`,
+          flags: [1 << 6] // Ephemeral flag equivalent
         });
       }
 
       cooldownMap.set(interaction.user.id, now);
       
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: false }).catch(() => {});
+        await interaction.deferReply({ flags: [] }).catch(() => {});
       }
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
       if (!interaction.deferred && !interaction.replied) {
@@ -181,7 +188,7 @@ client.on('interactionCreate', async (interaction) => {
       const ownerId = parts[3];
 
       if (interaction.user.id !== ownerId) {
-        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', ephemeral: true });
+        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
       const yearSelect = new StringSelectMenuBuilder()
@@ -205,7 +212,7 @@ client.on('interactionCreate', async (interaction) => {
       const ownerId = parts[3];
 
       if (interaction.user.id !== ownerId) {
-        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', ephemeral: true });
+        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
       const selectedYear = interaction.values[0];
@@ -239,7 +246,7 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (interaction.user.id !== ownerId) {
-        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', ephemeral: true });
+        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
       const key = `${targetYear}_${filterType}`;
@@ -288,13 +295,13 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /gen Year Selection (BUG FIX: editReply kullanımı) ---
+    // --- /gen Year Selection ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
       const selectedYear = interaction.values[0];
       const ownerId = interaction.customId.split('_')[2];
       
       if (interaction.user.id !== ownerId) {
-        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', ephemeral: true });
+        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
       const row = new ActionRowBuilder().addComponents(
@@ -327,7 +334,7 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (interaction.user.id !== ownerId) {
-        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', ephemeral: true });
+        return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
       const key = `${targetYear}_${filterType}`;
