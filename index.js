@@ -117,6 +117,11 @@ function validateUsernameByFilter(username, filterType) {
 const app = express();
 app.use(express.json());
 
+// UptimeRobot ve tarayıcılar için hem kök dizin (/) hem de /health endpoint'i eklendi
+app.get('/', (req, res) => {
+  res.status(200).send('Bot aktif ve çalışıyor!');
+});
+
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
@@ -199,7 +204,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ flags: [] }).catch(() => {});
+        await interaction.deferReply({ flags: [1 << 6] }).catch(() => {});
       }
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
       if (!interaction.deferred && !interaction.replied) {
@@ -235,7 +240,7 @@ client.on('interactionCreate', async (interaction) => {
         )
         .setTimestamp();
 
-      return await interaction.editReply({ embeds: [embed], flags: [1 << 6] });
+      return await interaction.editReply({ embeds: [embed] });
     }
 
     // --- /gen COMMAND ---
@@ -503,7 +508,7 @@ client.on('interactionCreate', async (interaction) => {
             accountData = {
               id: userDetails.id.toString(),
               name: userDetails.name,
-              createdDate: createdDate.toISOString().split('T')[0],
+              createdDate: userDetails.created.split('T')[0],
               isBanned: userDetails.isBanned || false,
               lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
               inventoryInfo: 'Public',
@@ -515,7 +520,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (!found) {
-          return await interaction.editReply({ content: `❌ No account found during instant live scan! Please try again later.`, components: [] });
+          return await interaction.editReply({ content: `❌ Could not find an account matching ${targetYear} - ${filterType} live. Please try again later or wait for generator stock.` });
         }
       }
 
@@ -526,7 +531,7 @@ client.on('interactionCreate', async (interaction) => {
       const statusText = accountData.isBanned ? '🔴 Banned' : '🟢 Active';
 
       const embed = new EmbedBuilder()
-        .setTitle(`👑 RADARBLOX PREMIUM ACCOUNT GENERATED`)
+        .setTitle('👑 PREMIUM ACCOUNT GENERATED')
         .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
         .setColor('#2F3136')
         .setThumbnail(accountData.avatarUrl)
@@ -537,7 +542,7 @@ client.on('interactionCreate', async (interaction) => {
           { name: '🌐 Last Activity', value: `\`${accountData.lastOnline || 'Offline'}\``, inline: true },
           { name: '🎒 Inventory', value: `\`${isPublic}\``, inline: false }
         )
-        .setFooter({ text: `RadarBlox Premium • Total Generations by you: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
+        .setFooter({ text: `RadarBlox Premium • Total Generations: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
 
       try {
@@ -547,8 +552,16 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
       }
     }
+
   } catch (err) {
     console.error('Interaction error:', err);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: '❌ An error occurred while processing this command.', components: [] }).catch(() => {});
+      } else {
+        await interaction.reply({ content: '❌ An error occurred while processing this command.', flags: [1 << 6] }).catch(() => {});
+      }
+    } catch {}
   }
 });
 
