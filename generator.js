@@ -31,10 +31,17 @@ function fetchJSON(url) {
 
 function validateUsernameByFilter(username) {
   if (/_/.test(username)) return null;
+  
   const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
   if (crossMatch && username.length > crossMatch[1].length * 2) return 'cross_user';
-  if (/(19\d{2}|20\d{2})/.test(username)) return 'year_user';
+  
+  // Gelişmiş year_user kontrolü: (isim2014, isim19981998, isim20007, isim200131 vb.)
+  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)$/.test(username) || /(19\d{2}|20\d{2})/.test(username)) {
+    return 'year_user';
+  }
+  
   if (/(\d{2})\1/.test(username)) return 'double_user';
+  
   return null;
 }
 
@@ -79,7 +86,6 @@ async function main() {
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-      // Hem /gen hem de /bulk-gen havuzlarına işlenmesi için webhook'a bildiriyoruz
       await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
