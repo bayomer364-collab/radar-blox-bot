@@ -530,7 +530,7 @@ client.on('interactionCreate', async (interaction) => {
           }
         }
 
-        if (!found) {
+        if (!found || !accountData) {
           return await interaction.editReply({ content: `❌ Could not find an account matching ${targetYear} - ${filterType} live. Please try again later or wait for generator stock.` });
         }
       }
