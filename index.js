@@ -187,6 +187,13 @@ const commands = [
 
 client.once('ready', async () => {
   console.log(`${client.user.tag} is online and ready!`);
+  
+  // Botun Discord'da çevrim içi (yeşil) görünmesini zorunlu kılan kısım
+  client.user.setPresence({
+    status: 'online',
+    activities: [{ name: 'RadarBlox', type: 0 }]
+  });
+
   try {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
