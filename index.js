@@ -561,7 +561,7 @@ client.on('interactionCreate', async (interaction) => {
 
       try {
         await interaction.user.send({ embeds: [embed] });
-        await interaction.editReply({ content: '✅ Account successfully sent to your DMs!', components: [] });
+        await interaction.editReply({ content: '✅ Accounts successfully sent to your DMs!', components: [] });
       } catch (e) {
         await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
       }
@@ -579,11 +579,14 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// TOKEN KONTROLÜ VE BAĞLANTI
+// TOKEN KONTROLÜ VE BAĞLANTI (Güncellenmiş Hata Yakalama)
 if (!TOKEN) {
   console.error("KRİTİK HATA: DISCORD_TOKEN tanımlı değil veya boş!");
 } else {
-  client.login(TOKEN).catch(err => {
-    console.error("Discord bağlantı hatası (Token geçersiz olabilir):", err);
-  });
+  console.log("Discord'a bağlanılıyor...");
+  client.login(TOKEN)
+    .then(() => console.log("Discord login başarılı!"))
+    .catch(err => {
+      console.error("DISCORD BAĞLANTI HATASI (Token veya Yetki Hatası):", err.message);
+    });
 }
