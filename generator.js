@@ -2,8 +2,8 @@ const https = require('https');
 
 console.log('[DEBUG] Generator.js (Dual-Stock Modu) Başlatıldı!');
 
-// DİKKAT: Burayı kendi güncel Railway web adresinle değiştirmelisin!
-const WEBHOOK_URL = 'https://buraya-kendi-railway-linkini-yaz.up.railway.app/api/add-account';
+// DİKKAT: Buradaki domain adresini kendi Railway domain adresinle değiştirdiğinden emin ol!
+const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
 const YEAR_ID_RANGES = {
@@ -30,7 +30,7 @@ function fetchJSON(url) {
   });
 }
 
-// Filtre doğrulama mekanizması (Daha esnek hale getirildi)
+// Filtre doğrulama mekanizması
 function validateUsernameByFilter(username) {
   // 1. cross_user kontrolü
   const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
