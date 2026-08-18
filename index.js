@@ -139,7 +139,8 @@ app.listen(PORT, '0.0.0.0', () => console.log(`Webhook server listening on port 
 // 2. DISCORD BOT COMMANDS
 const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Generate a single premium account.'),
-  new SlashCommandBuilder().setName('bulk-gen').setDescription('Generate multiple premium accounts.')
+  new SlashCommandBuilder().setName('bulk-gen').setDescription('Generate multiple premium accounts.'),
+  new SlashCommandBuilder().setName('stock').setDescription('Check current pool stocks.')
 ];
 
 client.once('ready', async () => {
@@ -170,7 +171,9 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
-      cooldownMap.set(interaction.user.id, now);
+      if (interaction.commandName !== 'stock') {
+        cooldownMap.set(interaction.user.id, now);
+      }
       
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ flags: [] }).catch(() => {});
@@ -179,6 +182,34 @@ client.on('interactionCreate', async (interaction) => {
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferUpdate().catch(() => {});
       }
+    }
+
+    // --- /stock COMMAND ---
+    if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
+      const db = getDB();
+      
+      let genTotal = 0;
+      let bulkTotal = 0;
+
+      for (const [key, accounts] of Object.entries(db)) {
+        const count = Array.isArray(accounts) ? accounts.length : 0;
+        if (key.startsWith('gen_')) {
+          genTotal += count;
+        } else if (key.startsWith('bulk_')) {
+          bulkTotal += count;
+        }
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle('📊 Current Stock Status')
+        .setColor('#2F3136')
+        .addFields(
+          { name: 'Gen', value: `\`${genTotal}\` account`, inline: true },
+          { name: 'Bulk-Gen', value: `\`${bulkTotal}\` account`, inline: true }
+        )
+        .setTimestamp();
+
+      return await interaction.editReply({ embeds: [embed], flags: [1 << 6] });
     }
 
     // --- /gen COMMAND ---
