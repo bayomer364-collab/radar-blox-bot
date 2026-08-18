@@ -112,13 +112,13 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /gen COMMAND (2010 - 2015 arası) ---
+    // --- /gen COMMAND (2006 - 2016 arası) ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
       const yearSelect = new StringSelectMenuBuilder()
         .setCustomId(`select_year_${interaction.user.id}`)
-        .setPlaceholder('Select Account Creation Year (2010 - 2015)')
-        .addOptions(Array.from({ length: 6 }, (_, i) => {
-          const year = (2010 + i).toString();
+        .setPlaceholder('Select Account Creation Year (2006 - 2016)')
+        .addOptions(Array.from({ length: 11 }, (_, i) => {
+          const year = (2006 + i).toString();
           return { label: year, value: year, description: `Accounts created in ${year}` };
         }));
 
@@ -128,7 +128,7 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /bulk-gen COMMAND (2010 - 2015 arası) ---
+    // --- /bulk-gen COMMAND (2006 - 2016 arası) ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') {
       if (!interaction.member.roles.cache.has(ROLE_ID)) {
         return await interaction.editReply({ content: '❌ You need the **Bulk-Gen Customer** role to use this command.' });
@@ -154,9 +154,9 @@ client.on('interactionCreate', async (interaction) => {
 
       const yearSelect = new StringSelectMenuBuilder()
         .setCustomId(`bulk_year_${amount}_${interaction.user.id}`)
-        .setPlaceholder('Select Account Creation Year (2010 - 2015)')
-        .addOptions(Array.from({ length: 6 }, (_, i) => {
-          const year = (2010 + i).toString();
+        .setPlaceholder('Select Account Creation Year (2006 - 2016)')
+        .addOptions(Array.from({ length: 11 }, (_, i) => {
+          const year = (2006 + i).toString();
           return { label: year, value: year, description: `Accounts created in ${year}` };
         }));
 
@@ -178,6 +178,7 @@ client.on('interactionCreate', async (interaction) => {
 
       const selectedYear = interaction.values[0];
       const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`bulk_gen_cross_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`bulk_gen_year_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('year_user').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`bulk_gen_double_user_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
       );
@@ -188,10 +189,23 @@ client.on('interactionCreate', async (interaction) => {
     // --- /bulk-gen Account Generation Process ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
       const parts = interaction.customId.split('_');
-      const filterType = `${parts[2]}_${parts[3]}`;
-      const targetYear = parts[4];
-      const amount = parseInt(parts[5]);
-      const ownerId = parts[6];
+      // Desteklenen filtre türü ismini doğru parse et (cross_user veya year_user veya double_user)
+      let filterType = '';
+      let targetYear = '';
+      let amount = 0;
+      let ownerId = '';
+
+      if (parts[2] === 'cross' && parts[3] === 'user') {
+        filterType = 'cross_user';
+        targetYear = parts[4];
+        amount = parseInt(parts[5]);
+        ownerId = parts[6];
+      } else {
+        filterType = `${parts[2]}_${parts[3]}`;
+        targetYear = parts[4];
+        amount = parseInt(parts[5]);
+        ownerId = parts[6];
+      }
 
       if (interaction.user.id !== ownerId) {
         return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
@@ -253,6 +267,7 @@ client.on('interactionCreate', async (interaction) => {
 
       const selectedYear = interaction.values[0];
       const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`gen_cross_user_${selectedYear}_${interaction.user.id}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`gen_year_user_${selectedYear}_${interaction.user.id}`).setLabel('year_user').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`gen_double_user_${selectedYear}_${interaction.user.id}`).setLabel('double_user').setStyle(ButtonStyle.Danger)
       );
@@ -263,9 +278,19 @@ client.on('interactionCreate', async (interaction) => {
     // --- /gen Account Generation Process ---
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
-      const filterType = `${parts[1]}_${parts[2]}`;
-      const targetYear = parts[3];
-      const ownerId = parts[4];
+      let filterType = '';
+      let targetYear = '';
+      let ownerId = '';
+
+      if (parts[1] === 'cross' && parts[2] === 'user') {
+        filterType = 'cross_user';
+        targetYear = parts[3];
+        ownerId = parts[4];
+      } else {
+        filterType = `${parts[1]}_${parts[2]}`;
+        targetYear = parts[3];
+        ownerId = parts[4];
+      }
 
       if (interaction.user.id !== ownerId) {
         return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s command menu.', ephemeral: true });
@@ -317,4 +342,3 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(TOKEN);
-                   
