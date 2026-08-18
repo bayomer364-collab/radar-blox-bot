@@ -87,7 +87,7 @@ function validateUsernameByFilter(username, filterType) {
   return false;
 }
 
-// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER (Render Uyumlu)
+// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER (Render Uyumlu - Dual Stock System)
 const app = express();
 app.use(express.json());
 
@@ -98,7 +98,7 @@ app.get('/health', (req, res) => {
 
 app.post('/api/add-account', (req, res) => {
   const { secret, targetYear, filterType, accountData } = req.body;
-  console.log('Webhook isteği alındı:', { targetYear, filterType, accountId: accountData?.id });
+  console.log('Webhook isteği alındы (Dual-Stock):', { targetYear, filterType, accountId: accountData?.id });
 
   if (secret !== WEBHOOK_SECRET) {
     console.warn('Geçersiz webhook şifresi (Unauthorized)');
@@ -106,15 +106,31 @@ app.post('/api/add-account', (req, res) => {
   }
 
   const db = getDB();
-  const key = `${targetYear}_${filterType}`;
-  if (!db[key]) db[key] = [];
+  
+  // Gelen hesabı hem /gen (gen_) hem de /bulk-gen (bulk_) havuzuna ayrı ayrı kaydediyoruz
+  const genKey = `gen_${targetYear}_${filterType}`;
+  const bulkKey = `bulk_${targetYear}_${filterType}`;
 
-  if (!db[key].some(acc => acc.id === accountData.id)) {
-    db[key].push(accountData);
+  if (!db[genKey]) db[genKey] = [];
+  if (!db[bulkKey]) db[bulkKey] = [];
+
+  let added = false;
+
+  if (!db[genKey].some(acc => acc.id === accountData.id)) {
+    db[genKey].push(accountData);
+    added = true;
+  }
+
+  if (!db[bulkKey].some(acc => acc.id === accountData.id)) {
+    db[bulkKey].push(accountData);
+    added = true;
+  }
+
+  if (added) {
     saveDB();
   }
 
-  return res.json({ success: true, stockCount: db[key].length });
+  return res.json({ success: true, genStockCount: db[genKey].length, bulkStockCount: db[bulkKey].length });
 });
 
 const PORT = process.env.PORT || 10000;
@@ -239,7 +255,7 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row] });
     }
 
-    // --- /bulk-gen Account Generation Process (Stoktan Yer) ---
+    // --- /bulk-gen Account Generation Process (Özel Bulk Havuzundan Yer) ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
@@ -263,12 +279,12 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
-      const key = `${targetYear}_${filterType}`;
+      const key = `bulk_${targetYear}_${filterType}`;
       const db = getDB();
       const stock = db[key] || [];
 
       if (stock.length < amount) {
-        return await interaction.editReply({ content: `❌ Not enough stock for bulk generation! Current stock: **${stock.length}**`, components: [] });
+        return await interaction.editReply({ content: `❌ Not enough stock for bulk generation! Current bulk stock: **${stock.length}**`, components: [] });
       }
 
       const generatedAccounts = [];
@@ -330,7 +346,7 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /gen Account Generation Process (ASLA STOKTAN YEMEZ - SADECE ANLIK TARAMA) ---
+    // --- /gen Account Generation Process (Özel Gen Havuzundan Yer) ---
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
@@ -351,50 +367,19 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.followUp({ content: '❌ You cannot interact with someone else\'s menu.', flags: [1 << 6] });
       }
 
-      await interaction.editReply({ content: `🔄 Scanning live for ${targetYear} - ${filterType} (Stock is reserved for bulk-gen)...` });
+      const key = `gen_${targetYear}_${filterType}`;
+      const db = getDB();
+      const stock = db[key] || [];
 
-      const baseIdMap = {
-        '2006': 100000, '2007': 500000, '2008': 1500000, '2009': 3000000,
-        '2010': 5000001, '2011': 13000001, '2012': 25000001, '2013': 40000001,
-        '2014': 60000001, '2015': 80000001, '2016': 110000000
-      };
-
-      let startId = baseIdMap[targetYear] || 5000000;
       let accountData = null;
-      let found = false;
 
-      // Anlık tarama döngüsü
-      for (let i = 0; i < 25; i++) {
-        const testId = startId + Math.floor(Math.random() * 5000);
-        const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
-
-        if (res.status === 429) break;
-        if (!res.data || !res.data.name) continue;
-
-        const userDetails = res.data;
-        const createdDate = new Date(userDetails.created);
-        const accountYear = createdDate.getFullYear().toString();
-
-        if (accountYear === targetYear && validateUsernameByFilter(userDetails.name, filterType)) {
-          const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
-          const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
-
-          accountData = {
-            id: userDetails.id.toString(),
-            name: userDetails.name,
-            createdDate: createdDate.toISOString().split('T')[0],
-            isBanned: userDetails.isBanned || false,
-            lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
-            inventoryInfo: 'Public',
-            avatarUrl: avatarUrl
-          };
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
-        return await interaction.editReply({ content: `❌ No account found during instant scan! Please try again.`, components: [] });
+      if (stock.length > 0) {
+        // Artık /gen de kendi özel stok havuzundan yiyor!
+        accountData = stock.shift();
+        db[key] = stock;
+        saveDB();
+      } else {
+        return await interaction.editReply({ content: `❌ No stock found in the single-gen pool for ${targetYear} - ${filterType}! Please wait for background generator to fill it up.`, components: [] });
       }
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
