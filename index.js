@@ -52,7 +52,6 @@ function getDB() {
 }
 
 function saveDB() {
-  // Diske yazma işlemini arka plana atarak botun kilitlenmesini ve yavaşlamasını önlüyoruz
   fs.writeFile(DB_FILE, JSON.stringify(memoryDB, null, 2), 'utf8', (err) => {
     if (err) {
       console.error('Kayıt hatası:', err);
@@ -88,9 +87,14 @@ function validateUsernameByFilter(username, filterType) {
   return false;
 }
 
-// 1. EXPRESS WEBHOOK SERVER (Render Port Uyumlu)
+// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER (Render Uyumlu)
 const app = express();
 app.use(express.json());
+
+// Render'ın botu "ölü" sanıp restart atmasını önleyen Health Check endpoint'i
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
 
 app.post('/api/add-account', (req, res) => {
   const { secret, targetYear, filterType, accountData } = req.body;
@@ -107,14 +111,14 @@ app.post('/api/add-account', (req, res) => {
 
   if (!db[key].some(acc => acc.id === accountData.id)) {
     db[key].push(accountData);
-    saveDB(); // Arka planda diske kaydet
+    saveDB();
   }
 
   return res.json({ success: true, stockCount: db[key].length });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Webhook server listening on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, '0.0.0.0', () => console.log(`Webhook server listening on port ${PORT}`));
 
 // 2. DISCORD BOT COMMANDS
 const commands = [
@@ -135,19 +139,18 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    // --- COOLDOWN & DEFER CONTROLS ---
     if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
       const cooldownMap = isBulk ? cooldownsBulk : cooldownsGen;
-      const timeLimit = isBulk ? 50000 : 25000; // Bulk: 50s, Gen: 25s
+      const timeLimit = isBulk ? 50000 : 25000;
 
       const lastUsed = cooldownMap.get(interaction.user.id);
       if (lastUsed && (now - lastUsed < timeLimit)) {
         const remaining = ((timeLimit - (now - lastUsed)) / 1000).toFixed(1);
         return await interaction.reply({
           content: `⏱️ Please wait **${remaining}s** before using this command again`,
-          flags: [1 << 6] // Ephemeral flag equivalent
+          flags: [1 << 6]
         });
       }
 
@@ -354,14 +357,11 @@ client.on('interactionCreate', async (interaction) => {
 
       let accountData = null;
 
-      // 1. Check stock first
       if (stock.length > 0) {
         accountData = stock.shift();
         db[key] = stock;
         saveDB();
-      } 
-      // 2. If no stock, perform an instant safe scan
-      else {
+      } else {
         await interaction.editReply({ content: `🔄 No ready stock found for ${targetYear} - ${filterType}, scanning instantly...` });
 
         const baseIdMap = {
