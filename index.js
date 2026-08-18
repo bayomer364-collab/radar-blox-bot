@@ -13,6 +13,7 @@ const {
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 // Prevent bot crashes due to unhandled promise rejections
 process.on('unhandledRejection', error => {
@@ -29,9 +30,9 @@ const ROLE_ID = '1538940771967700992';
 
 const userGenCount = new Map();
 
-// Spam Protection Cooldown Map (10 Seconds)
+// Spam Protection Cooldown Map (20 Seconds for safety)
 const cooldowns = new Map();
-const COOLDOWN_TIME = 10 * 1000;
+const COOLDOWN_TIME = 20 * 1000;
 
 function getDB() {
   if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
@@ -40,6 +41,36 @@ function getDB() {
 
 function saveDB(data) {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
+
+function fetchJSON(url) {
+  return new Promise((resolve) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(data) }); } 
+        catch (e) { resolve({ status: res.statusCode, data: null }); }
+      });
+    }).on('error', () => {
+      resolve({ status: 500, data: null });
+    });
+  });
+}
+
+// Anlık tarama filtresi doğrulama
+function validateUsernameByFilter(username, filterType) {
+  if (/_/.test(username)) return null;
+
+  if (filterType === 'cross_user') {
+    const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
+    if (crossMatch && username.length > crossMatch[1].length * 2) return true;
+  } else if (filterType === 'year_user') {
+    if (/(19\d{2}|20\d{2})/.test(username)) return true;
+  } else if (filterType === 'double_user') {
+    if (/(\d{2})\1/.test(username)) return true;
+  }
+  return false;
 }
 
 // 1. EXPRESS WEBHOOK SERVER
@@ -88,7 +119,7 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    // --- 10 SECONDS COOLDOWN & DEFER ---
+    // --- 20 SECONDS COOLDOWN & DEFER ---
     if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const userCooldown = cooldowns.get(interaction.user.id);
@@ -96,7 +127,7 @@ client.on('interactionCreate', async (interaction) => {
       if (userCooldown && (now - userCooldown < COOLDOWN_TIME)) {
         const remaining = ((COOLDOWN_TIME - (now - userCooldown)) / 1000).toFixed(1);
         return await interaction.reply({
-          content: `⏱️ Please wait **${remaining}s** before using generator commands again.`,
+          content: `⏱️ Please wait **${remaining}s** before using generator commands again (Spam Protection).`,
           ephemeral: true
         });
       }
@@ -189,7 +220,6 @@ client.on('interactionCreate', async (interaction) => {
     // --- /bulk-gen Account Generation Process ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
       const parts = interaction.customId.split('_');
-      // Desteklenen filtre türü ismini doğru parse et (cross_user veya year_user veya double_user)
       let filterType = '';
       let targetYear = '';
       let amount = 0;
@@ -216,7 +246,7 @@ client.on('interactionCreate', async (interaction) => {
       const stock = db[key] || [];
 
       if (stock.length < amount) {
-        return await interaction.editReply({ content: `❌ Not enough stock for this category! Current stock: **${stock.length}**`, components: [] });
+        return await interaction.editReply({ content: `❌ Not enough stock for bulk generation! Current stock: **${stock.length}**`, components: [] });
       }
 
       const generatedAccounts = [];
@@ -275,7 +305,7 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.editReply({ content: `Selected Year: **/gen year: ${selectedYear}**\nPlease select username pattern:`, components: [row] });
     }
 
-    // --- /gen Account Generation Process ---
+    // --- /gen Account Generation Process (HİBRİT: Önce Stok, Yoksa Anlık Tarama) ---
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
@@ -300,13 +330,62 @@ client.on('interactionCreate', async (interaction) => {
       const db = getDB();
       const stock = db[key] || [];
 
-      if (stock.length === 0) {
-        return await interaction.editReply({ content: `❌ No stock available for this category right now!`, components: [] });
-      }
+      let accountData = null;
 
-      const accountData = stock.shift();
-      db[key] = stock;
-      saveDB(db);
+      // 1. Önce stok varsa oradan al
+      if (stock.length > 0) {
+        accountData = stock.shift();
+        db[key] = stock;
+        saveDB(db);
+      } 
+      // 2. Stok yoksa güvenli sınırda anlık tarama yap
+      else {
+        await interaction.editReply({ content: `🔄 Stokta hazır ${targetYear} - ${filterType} bulunamadı, senin için anlık tarama yapılıyor...` });
+
+        // Yıl bazlı ortalama ID referansları
+        const baseIdMap = {
+          '2006': 100000, '2007': 500000, '2008': 1500000, '2009': 3000000,
+          '2010': 5000001, '2011': 13000001, '2012': 25000001, '2013': 40000001,
+          '2014': 60000001, '2015': 80000001, '2016': 110000000
+        };
+
+        let startId = baseIdMap[targetYear] || 5000000;
+        let found = false;
+
+        // Rate limit yememek için maksimum 25 deneme
+        for (let i = 0; i < 25; i++) {
+          const testId = startId + Math.floor(Math.random() * 5000);
+          const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
+
+          if (res.status === 429) break; // Rate limit yerse dur
+          if (!res.data || !res.data.name) continue;
+
+          const userDetails = res.data;
+          const createdDate = new Date(userDetails.created);
+          const accountYear = createdDate.getFullYear().toString();
+
+          if (accountYear === targetYear && validateUsernameByFilter(userDetails.name, filterType)) {
+            const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
+            const avatarUrl = (avatarRes.data && avatarRes.data.data && avatarRes.data.data[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
+
+            accountData = {
+              id: userDetails.id.toString(),
+              name: userDetails.name,
+              createdDate: createdDate.toISOString().split('T')[0],
+              isBanned: userDetails.isBanned || false,
+              lastOnline: userDetails.isBanned ? 'Banned' : 'Active',
+              inventoryInfo: 'Public',
+              avatarUrl: avatarUrl
+            };
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          return await interaction.editReply({ content: `❌ Anlık taramada uygun hesap bulunamadı! Lütfen daha sonra tekrar dene veya arka plandaki stokların dolmasını bekle.`, components: [] });
+        }
+      }
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
