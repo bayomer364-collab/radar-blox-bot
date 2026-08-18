@@ -149,7 +149,8 @@ client.on('interactionCreate', async (interaction) => {
       if (lastUsed && (now - lastUsed < timeLimit)) {
         const remaining = ((timeLimit - (now - lastUsed)) / 1000).toFixed(1);
         return await interaction.reply({
-          content: `⏱️ Bu komutu tekrar kullanabilmek için lütfen **${remaining}s** bekleyin.`
+          content: `⏱️ Bu komutu tekrar kullanabilmek için lütfen **${remaining}s** bekleyin.`,
+          ephemeral: true
         });
       }
 
@@ -158,9 +159,20 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply().catch(() => {});
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
       }
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      // Güvenlik Kontrolü: Başkasının butonuna/menüsüne basmasını engelle
+      const customIdParts = interaction.customId.split('_');
+      const ownerId = customIdParts[customIdParts.length - 1];
+
+      if (ownerId && ownerId !== interaction.user.id) {
+        return await interaction.reply({ 
+          content: '❌ Bu menüyü veya butonları yalnızca komutu çalıştıran kullanıcı kullanabilir!', 
+          ephemeral: true 
+        });
+      }
+
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferUpdate().catch(() => {});
       }
@@ -451,7 +463,7 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: '❌ Bu komut işlenirken bir hata oluştu.', components: [] }).catch(() => {});
       } else {
-        await interaction.reply({ content: '❌ Bu komut işlenirken bir hata oluştu.' }).catch(() => {});
+        await interaction.reply({ content: '❌ Bu komut işlenirken bir hata oluştu.', ephemeral: true }).catch(() => {});
       }
     } catch {}
   }
