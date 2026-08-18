@@ -20,7 +20,14 @@ process.on('unhandledRejection', error => {
   console.error('Unhandled promise rejection:', error);
 });
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
+// Intents fix for online status
+const client = new Client({ 
+  intents: [
+    GatewayIntentBits.Guilds, 
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ] 
+});
 
 // Configs
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -73,7 +80,6 @@ function fetchJSON(url) {
   });
 }
 
-// Resimdeki Yeni ve Genişletilmiş Metod Doğrulama Mantığı
 function validateUsernameByFilter(username, filterType) {
   if (/_/.test(username)) return null;
 
@@ -164,14 +170,11 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook server listening on port ${PORT}`);
 
-  // Otomatik Kendini Uyandırma (Self-Ping) - Her 4 dakikada bir bot kendine istek atar
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   setInterval(() => {
     https.get(SELF_URL, (res) => {
       res.on('data', () => {});
-    }).on('error', (err) => {
-      // Sessizce geç veya logla
-    });
+    }).on('error', () => {});
   }, 4 * 60 * 1000);
 });
 
@@ -576,4 +579,11 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.login(TOKEN);
+// TOKEN KONTROLÜ VE BAĞLANTI
+if (!TOKEN) {
+  console.error("KRİTİK HATA: DISCORD_TOKEN tanımlı değil veya boş!");
+} else {
+  client.login(TOKEN).catch(err => {
+    console.error("Discord bağlantı hatası (Token geçersiz olabilir):", err);
+  });
+}
