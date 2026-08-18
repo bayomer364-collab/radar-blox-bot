@@ -13,8 +13,6 @@ const {
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
 
 process.on('unhandledRejection', error => {
   console.error('Unhandled promise rejection:', error);
@@ -58,7 +56,7 @@ function saveDB() {
   });
 }
 
-// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER
+// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER (Optimize Edildi)
 const app = express();
 app.use(express.json());
 
@@ -72,10 +70,7 @@ app.get('/health', (req, res) => {
 
 app.post('/api/add-account', (req, res) => {
   const { secret, targetYear, filterType, accountData } = req.body;
-  console.log('Webhook received (Dual-Stock):', { targetYear, filterType, accountId: accountData?.id });
-
   if (secret !== WEBHOOK_SECRET) {
-    console.warn('Invalid webhook secret (Unauthorized)');
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
@@ -87,36 +82,22 @@ app.post('/api/add-account', (req, res) => {
   if (!db[bulkKey]) db[bulkKey] = [];
 
   let added = false;
-
   if (!db[genKey].some(acc => acc.id === accountData.id)) {
     db[genKey].push(accountData);
     added = true;
   }
-
   if (!db[bulkKey].some(acc => acc.id === accountData.id)) {
     db[bulkKey].push(accountData);
     added = true;
   }
 
-  if (added) {
-    saveDB();
-  }
-
+  if (added) saveDB();
   return res.json({ success: true, genStockCount: db[genKey].length, bulkStockCount: db[bulkKey].length });
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook server listening on port ${PORT}`);
-
-  const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-  const clientModule = SELF_URL.startsWith('https') ? https : http;
-
-  setInterval(() => {
-    clientModule.get(SELF_URL, (res) => {
-      res.on('data', () => {});
-    }).on('error', () => {});
-  }, 4 * 60 * 1000);
 });
 
 // 2. DISCORD BOT COMMANDS
@@ -158,7 +139,6 @@ client.on('interactionCreate', async (interaction) => {
         cooldownMap.set(interaction.user.id, now);
       }
       
-      // Herkese açık görünmesi için deferReply yerine doğrudan interaction.reply kullanıyoruz veya varsayılan açık bırakıyoruz
       if (!interaction.deferred && !interaction.replied) {
         await interaction.reply({ content: '⏳ Processing your request...', ephemeral: false }).catch(() => {});
       }
@@ -437,7 +417,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.user.send({ embeds: [embed] });
         await interaction.editReply({ content: '✅ Account successfully sent to your DMs!', components: [] });
       } catch (e) {
-        db[key].unshift(accountData); // Return stock if sending fails
+        db[key].unshift(accountData);
         saveDB();
         return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
       }
