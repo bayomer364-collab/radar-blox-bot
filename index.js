@@ -198,6 +198,7 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
+    // 3 Saniye kuralını aşmak için TÜM etkileşimleri anında defer ediyoruz (Gizli yanıt olarak)
     if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
@@ -579,7 +580,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// TOKEN KONTROLÜ VE BAĞLANTI (Güncellenmiş Hata Yakalama)
+// TOKEN KONTROLÜ VE BAĞLANTI
 if (!TOKEN) {
   console.error("KRİTİK HATA: DISCORD_TOKEN tanımlı değil veya boş!");
 } else {
