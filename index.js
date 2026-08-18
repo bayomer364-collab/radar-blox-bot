@@ -35,18 +35,29 @@ const userGenCount = new Map();
 const cooldownsGen = new Map();
 const cooldownsBulk = new Map();
 
-function getDB() {
-  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
-  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (e) { return {}; }
+// --- MEMORY DB SETUP ---
+let memoryDB = {};
+
+// Bot açılırken verileri bir kere RAM'e yükle
+if (fs.existsSync(DB_FILE)) {
+  try { 
+    memoryDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); 
+  } catch (e) { 
+    memoryDB = {}; 
+  }
 }
 
-function saveDB(data) {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-    console.log('Stok güncellendi ve kaydedildi.');
-  } catch (err) {
-    console.error('Kayıt hatası:', err);
-  }
+function getDB() {
+  return memoryDB;
+}
+
+function saveDB() {
+  // Diske yazma işlemini arka plana atarak botun kilitlenmesini ve yavaşlamasını önlüyoruz
+  fs.writeFile(DB_FILE, JSON.stringify(memoryDB, null, 2), 'utf8', (err) => {
+    if (err) {
+      console.error('Kayıt hatası:', err);
+    }
+  });
 }
 
 function fetchJSON(url) {
@@ -96,7 +107,7 @@ app.post('/api/add-account', (req, res) => {
 
   if (!db[key].some(acc => acc.id === accountData.id)) {
     db[key].push(accountData);
-    saveDB(db);
+    saveDB(); // Arka planda diske kaydet
   }
 
   return res.json({ success: true, stockCount: db[key].length });
@@ -262,7 +273,7 @@ client.on('interactionCreate', async (interaction) => {
         generatedAccounts.push(stock.shift());
       }
       db[key] = stock;
-      saveDB(db);
+      saveDB();
 
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + amount;
       userGenCount.set(interaction.user.id, currentCount);
@@ -347,7 +358,7 @@ client.on('interactionCreate', async (interaction) => {
       if (stock.length > 0) {
         accountData = stock.shift();
         db[key] = stock;
-        saveDB(db);
+        saveDB();
       } 
       // 2. If no stock, perform an instant safe scan
       else {
