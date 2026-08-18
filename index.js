@@ -158,11 +158,12 @@ client.on('interactionCreate', async (interaction) => {
         cooldownMap.set(interaction.user.id, now);
       }
       
+      // Burası değiştirildi: Herkese açık olması için ephemeral kaldırıldı
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        await interaction.deferReply().catch(() => {});
       }
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      // Güvenlik Kontrolü: Başkasının butonuna/menüsüne basmasını engelle
+      // Güvenlik Kontrolü: Başkasının butonuna/menüsüne basmasını engelle (Sadece basana hata gösterilir)
       const customIdParts = interaction.customId.split('_');
       const ownerId = customIdParts[customIdParts.length - 1];
 
@@ -463,7 +464,7 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: '❌ Bu komut işlenirken bir hata oluştu.', components: [] }).catch(() => {});
       } else {
-        await interaction.reply({ content: '❌ Bu komut işlenirken bir hata oluştu.', ephemeral: true }).catch(() => {});
+        await interaction.reply({ content: '❌ Bu komut işlenirken bir hata oluştu.' }).catch(() => {});
       }
     } catch {}
   }
