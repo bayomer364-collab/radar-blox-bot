@@ -14,6 +14,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const http = require('http');
 
 process.on('unhandledRejection', error => {
   console.error('Unhandled promise rejection:', error);
@@ -109,8 +110,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook sunucusu ${PORT} portunda dinleniyor`);
 
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  const clientModule = SELF_URL.startsWith('https') ? https : http;
+
   setInterval(() => {
-    https.get(SELF_URL, (res) => {
+    clientModule.get(SELF_URL, (res) => {
       res.on('data', () => {});
     }).on('error', () => {});
   }, 4 * 60 * 1000);
@@ -147,7 +150,6 @@ client.on('interactionCreate', async (interaction) => {
         const remaining = ((timeLimit - (now - lastUsed)) / 1000).toFixed(1);
         return await interaction.reply({
           content: `⏱️ Bu komutu tekrar kullanabilmek için lütfen **${remaining}s** bekleyin.`
-          // Gizli yanıt (ephemeral) kaldırıldı, herkes görebilir.
         });
       }
 
@@ -156,7 +158,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply().catch(() => {}); // Gizli yanıt bayrağı kaldırıldı
+        await interaction.deferReply().catch(() => {});
       }
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
       if (!interaction.deferred && !interaction.replied) {
@@ -230,8 +232,6 @@ client.on('interactionCreate', async (interaction) => {
       const parts = interaction.customId.split('_');
       const amount = parts[2];
       const ownerId = parts[3];
-
-      // İsteyen herkesin menüyü kullanabilmesi için sahiplik kontrolü kaldırıldı veya serbest bırakıldı (istersen koruyabilirsin ama herkesin görmesi istendiği için serbest bırakıldı).
 
       const yearSelect = new StringSelectMenuBuilder()
         .setCustomId(`bulk_year_${amount}_${interaction.user.id}`)
