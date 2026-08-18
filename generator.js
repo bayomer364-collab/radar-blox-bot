@@ -1,8 +1,9 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Dual-Stock Mode) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Dual-Stock Modu) Başlatıldı!');
 
-const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
+// DİKKAT: Burayı kendi güncel Railway web adresinle değiştirmelisin!
+const WEBHOOK_URL = 'https://buraya-kendi-railway-linkini-yaz.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
 const YEAR_ID_RANGES = {
@@ -29,10 +30,8 @@ function fetchJSON(url) {
   });
 }
 
-// Bot ile birebir aynı çalışan genişletilmiş doğrulama mantığı
+// Filtre doğrulama mekanizması (Daha esnek hale getirildi)
 function validateUsernameByFilter(username) {
-  if (/_/.test(username)) return null;
-  
   // 1. cross_user kontrolü
   const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
   if (crossMatch && username.length > crossMatch[1].length * 2) return 'cross_user';
@@ -84,7 +83,7 @@ async function main() {
       const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
       
       if (res.status === 429) {
-        console.log('[WARNING] Rate limit! 30 saniye mola veriliyor...');
+        console.log('[UYARI] İstek sınırı (Rate limit) aşıldı! 30 saniye mola veriliyor...');
         await sleep(30000);
         continue;
       }
@@ -102,7 +101,7 @@ async function main() {
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-      await sendWebhook(JSON.stringify({
+      const webhookResponseCode = await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
         filterType: matchedFilter,
@@ -111,17 +110,17 @@ async function main() {
           name: username,
           createdDate: res.data.created.split('T')[0],
           isBanned: res.data.isBanned || false,
-          lastOnline: res.data.isBanned ? 'Banned' : 'Active',
-          inventoryInfo: 'Public',
+          lastOnline: res.data.isBanned ? 'Yasaklı' : 'Aktif',
+          inventoryInfo: 'Herkese Açık',
           avatarUrl: avatarUrl
         }
       }));
       
-      console.log(`[SUCCESS] Bulundu ve Havuzlara Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter}`);
+      console.log(`[BAŞARILI] Hesap Bulundu ve Stoklara Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter} | Webhook Yanıt Kodu: ${webhookResponseCode}`);
       await sleep(500);
 
     } catch (err) {
-      console.error('[ERROR] Beklenmedik hata:', err);
+      console.error('[HATA] Beklenmedik bir hata oluştu:', err);
       await sleep(5000);
     }
   }
