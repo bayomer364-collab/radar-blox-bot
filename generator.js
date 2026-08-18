@@ -1,17 +1,23 @@
 const https = require('https');
 
-console.log('[DEBUG] GitHub Actions için optimize edilmiş generator.js başlatıldı!');
+console.log('[DEBUG] Genişletilmiş yıl ve cross_user destekli generator.js başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
+// 2006 - 2016 arası ortalama Roblox ID başlangıç referansları
 const YEAR_ID_RANGES = {
+  '2006': 100000,
+  '2007': 500000,
+  '2008': 1500000,
+  '2009': 3000000,
   '2010': 5000001,
   '2011': 13000001,
   '2012': 25000001,
   '2013': 40000001,
   '2014': 60000001,
-  '2015': 80000001
+  '2015': 80000001,
+  '2016': 110000000
 };
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
@@ -32,12 +38,23 @@ function fetchJSON(url) {
   });
 }
 
+// Akıllı Filtreleme: year_user, double_user ve yeni cross_user
 function validateUsernameByFilter(username) {
   if (/_/.test(username)) return null;
 
+  // 1. Cross User Kriteri: Örn: 123david123, luis123luis (Baştaki ve sondaki kalıp aynı)
+  // En az 2-3 karakterli baş/son eşleşmelerini yakalar
+  const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
+  if (crossMatch && username.length > crossMatch[1].length * 2) {
+    return 'cross_user';
+  }
+
+  // 2. Year User Kriteri: İçinde 19xx veya 20xx geçiyor mu?
   if (/(19\d{2}|20\d{2})/.test(username)) {
     return 'year_user';
   }
+
+  // 3. Double User Kriteri: Yan yana aynı iki rakam var mı? (örn: xx55, aa99)
   if (/(\d{2})\1/.test(username)) {
     return 'double_user';
   }
@@ -72,8 +89,8 @@ function sendWebhook(payload) {
 }
 
 async function scanBatch() {
-  // GitHub her 15 dakikada bir çalıştırdığı için her çalıştırmada örneğin 50-60 istek atsın ve kapansın
-  const ITERATIONS = 50; 
+  // GitHub actions her çalıştığında taranacak istek sayısı (bulma şansını artırmak için 100 yaptık)
+  const ITERATIONS = 100; 
 
   for (let i = 0; i < ITERATIONS; i++) {
     const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
@@ -89,7 +106,7 @@ async function scanBatch() {
     }
 
     if (!res.data || !res.data.name) {
-      await new Promise(resolve => setTimeout(resolve, 800)); // Boşsa hızlı geç
+      await new Promise(resolve => setTimeout(resolve, 500));
       continue;
     }
 
@@ -97,8 +114,8 @@ async function scanBatch() {
     const createdDate = new Date(userDetails.created);
     const accountYear = createdDate.getFullYear().toString();
     
-    if (accountYear !== targetYear) {
-      await new Promise(resolve => setTimeout(resolve, 800));
+    if (!YEAR_ID_RANGES[accountYear]) {
+      await new Promise(resolve => setTimeout(resolve, 500));
       continue;
     }
 
@@ -106,7 +123,7 @@ async function scanBatch() {
     const matchedFilter = validateUsernameByFilter(username);
     
     if (!matchedFilter) {
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
       continue;
     }
 
@@ -116,7 +133,7 @@ async function scanBatch() {
     const payload = JSON.stringify({
       secret: WEBHOOK_SECRET,
       targetYear: accountYear,
-      filterType: matchedFilter,
+      filterType: matchedFilter, // Artık cross_user da dahil!
       accountData: {
         id: userDetails.id.toString(),
         name: username,
@@ -131,8 +148,7 @@ async function scanBatch() {
     await sendWebhook(payload);
     console.log(`[VALID ACCOUNT FOUND] ${username} (${accountYear}) - Filter: ${matchedFilter} [ID: ${testId}]`);
 
-    // İstekler arası küçük bir bekleme (GitHub IP'lerinin banlanmaması için)
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   console.log('[DEBUG] Bu tur tarama tamamlandı, script güvenle kapanıyor.');
