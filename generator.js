@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js 7/24 Modunda Başlatıldı!');
+console.log('[DEBUG] Generator.js (Dual-Stock Mode) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot.onrender.com/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -14,7 +14,6 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 let currentIds = { ...YEAR_ID_RANGES };
 
-// Yardımcı bekleme fonksiyonu
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function fetchJSON(url) {
@@ -45,19 +44,17 @@ async function sendWebhook(payload) {
     const req = https.request({
       hostname: webhookUrl.hostname, port: 443, path: webhookUrl.pathname,
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-    }, (res) => resolve(res.statusCode)); // Sonucu döndür
+    }, (res) => resolve(res.statusCode));
     req.on('error', () => resolve(500));
     req.write(payload);
     req.end();
   });
 }
 
-// ANA DÖNGÜ
 async function main() {
   while (true) {
     try {
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
-      // ID atlama aralığını biraz küçülttük (daha hassas tarama)
       const testId = currentIds[targetYear] + Math.floor(Math.random() * 2000);
       currentIds[targetYear] += 2000; 
 
@@ -70,7 +67,7 @@ async function main() {
       }
 
       if (!res.data || !res.data.name) {
-        await sleep(200); // Boş hesaplarda bekleme
+        await sleep(200);
         continue;
       }
 
@@ -79,10 +76,10 @@ async function main() {
       
       if (!matchedFilter) continue;
 
-      // Hesap bulundu
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
+      // Hem /gen hem de /bulk-gen havuzlarına işlenmesi için webhook'a bildiriyoruz
       await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
@@ -98,12 +95,12 @@ async function main() {
         }
       }));
       
-      console.log(`[SUCCESS] Bulundu: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter}`);
-      await sleep(500); // Başarılı bulduğunda kısa mola (IP koruması)
+      console.log(`[SUCCESS] Bulundu ve Havuzlara Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter}`);
+      await sleep(500);
 
     } catch (err) {
       console.error('[ERROR] Beklenmedik hata:', err);
-      await sleep(5000); // Hata durumunda bekle
+      await sleep(5000);
     }
   }
 }
