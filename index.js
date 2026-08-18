@@ -54,7 +54,7 @@ function getDB() {
 
 function saveDB() {
   fs.writeFile(DB_FILE, JSON.stringify(memoryDB, null, 2), 'utf8', (err) => {
-    if (err) console.error('Kayıt hatası:', err);
+    if (err) console.error('Save error:', err);
   });
 }
 
@@ -63,7 +63,7 @@ const app = express();
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.status(200).send('Bot aktif ve çalışıyor!');
+  res.status(200).send('Bot is active and running!');
 });
 
 app.get('/health', (req, res) => {
@@ -72,11 +72,11 @@ app.get('/health', (req, res) => {
 
 app.post('/api/add-account', (req, res) => {
   const { secret, targetYear, filterType, accountData } = req.body;
-  console.log('Webhook alındı (Dual-Stock):', { targetYear, filterType, accountId: accountData?.id });
+  console.log('Webhook received (Dual-Stock):', { targetYear, filterType, accountId: accountData?.id });
 
   if (secret !== WEBHOOK_SECRET) {
-    console.warn('Geçersiz webhook şifresi (Yetkisiz)');
-    return res.status(403).json({ error: 'Yetkisiz' });
+    console.warn('Invalid webhook secret (Unauthorized)');
+    return res.status(403).json({ error: 'Unauthorized' });
   }
 
   const db = getDB();
@@ -107,7 +107,7 @@ app.post('/api/add-account', (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Webhook sunucusu ${PORT} portunda dinleniyor`);
+  console.log(`Webhook server listening on port ${PORT}`);
 
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   const clientModule = SELF_URL.startsWith('https') ? https : http;
@@ -121,19 +121,19 @@ app.listen(PORT, '0.0.0.0', () => {
 
 // 2. DISCORD BOT COMMANDS
 const commands = [
-  new SlashCommandBuilder().setName('gen').setDescription('Tekli premium hesap üretir.'),
-  new SlashCommandBuilder().setName('bulk-gen').setDescription('Çoklu toplu premium hesap üretir.'),
-  new SlashCommandBuilder().setName('stock').setDescription('Güncel detaylı havuz stoklarını gösterir.')
+  new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
+  new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
+  new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.')
 ];
 
 client.once('ready', async () => {
-  console.log(`${client.user.tag} çevrimiçi ve hazır!`);
+  console.log(`${client.user.tag} is online and ready!`);
   try {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log('Komutlar başarıyla yüklendi.');
+    console.log('Commands successfully loaded.');
   } catch (error) {
-    console.error('Komut yükleme hatası:', error);
+    console.error('Command loading error:', error);
   }
 });
 
@@ -149,7 +149,7 @@ client.on('interactionCreate', async (interaction) => {
       if (lastUsed && (now - lastUsed < timeLimit)) {
         const remaining = ((timeLimit - (now - lastUsed)) / 1000).toFixed(1);
         return await interaction.reply({
-          content: `⏱️ Bu komutu tekrar kullanabilmek için lütfen **${remaining}s** bekleyin.`,
+          content: `⏱️ Please wait **${remaining}s** before using this command again.`,
           ephemeral: true
         });
       }
@@ -158,18 +158,17 @@ client.on('interactionCreate', async (interaction) => {
         cooldownMap.set(interaction.user.id, now);
       }
       
-      // Burası değiştirildi: Herkese açık olması için ephemeral kaldırıldı
+      // Herkese açık görünmesi için deferReply yerine doğrudan interaction.reply kullanıyoruz veya varsayılan açık bırakıyoruz
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply().catch(() => {});
+        await interaction.reply({ content: '⏳ Processing your request...', ephemeral: false }).catch(() => {});
       }
     } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      // Güvenlik Kontrolü: Başkasının butonuna/menüsüne basmasını engelle (Sadece basana hata gösterilir)
       const customIdParts = interaction.customId.split('_');
       const ownerId = customIdParts[customIdParts.length - 1];
 
       if (ownerId && ownerId !== interaction.user.id) {
         return await interaction.reply({ 
-          content: '❌ Bu menüyü veya butonları yalnızca komutu çalıştıran kullanıcı kullanabilir!', 
+          content: '❌ You cannot use this menu or buttons as you did not run the command!', 
           ephemeral: true 
         });
       }
@@ -179,7 +178,7 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /stock KOMUTU ---
+    // --- /stock COMMAND ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
       const db = getDB();
       const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
@@ -199,72 +198,70 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('📊 Detaylı Stok Durumu')
+        .setTitle('📊 Detailed Stock Status')
         .setColor('#2F3136')
         .addFields(
-          { name: '🔹 Gen Havuzu', value: genText.slice(0, 1024), inline: true },
-          { name: '🔸 Bulk-Gen Havuzu', value: bulkText.slice(0, 1024), inline: true }
+          { name: '🔹 Gen Pool', value: genText.slice(0, 1024), inline: true },
+          { name: '🔸 Bulk-Gen Pool', value: bulkText.slice(0, 1024), inline: true }
         )
         .setTimestamp();
 
-      return await interaction.editReply({ embeds: [embed] });
+      return await interaction.editReply({ content: '', embeds: [embed] });
     }
 
-    // --- /gen KOMUTU ---
+    // --- /gen COMMAND ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
       const yearSelect = new StringSelectMenuBuilder()
         .setCustomId(`select_year_${interaction.user.id}`)
-        .setPlaceholder('Hesap Açılış Yılını Seçin (2006 - 2016)')
+        .setPlaceholder('Select Account Creation Year (2006 - 2016)')
         .addOptions(Array.from({ length: 11 }, (_, i) => {
           const year = (2006 + i).toString();
-          return { label: year, value: year, description: `${year} yılında oluşturulan hesaplar` };
+          return { label: year, value: year, description: `Accounts created in ${year}` };
         }));
 
       return await interaction.editReply({
-        content: 'Lütfen hesap açılış yılını seçin:',
+        content: 'Please select the account creation year:',
         components: [new ActionRowBuilder().addComponents(yearSelect)]
       });
     }
 
-    // --- /bulk-gen KOMUTU ---
+    // --- /bulk-gen COMMAND ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'bulk-gen') {
       if (!interaction.member.roles.cache.has(ROLE_ID)) {
-        return await interaction.editReply({ content: '❌ Bu komutu kullanabilmek için **Bulk-Gen Customer** rolüne sahip olmalısınız.' });
+        return await interaction.editReply({ content: '❌ You must have the **Bulk-Gen Customer** role to use this command.' });
       }
 
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`bulk_amt_5_${interaction.user.id}`).setLabel('5 Hesap').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`bulk_amt_10_${interaction.user.id}`).setLabel('10 Hesap').setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId(`bulk_amt_5_${interaction.user.id}`).setLabel('5 Accounts').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`bulk_amt_10_${interaction.user.id}`).setLabel('10 Accounts').setStyle(ButtonStyle.Success)
       );
 
-      return await interaction.editReply({ content: 'Üretilecek miktarını seçin:', components: [row] });
+      return await interaction.editReply({ content: 'Select the amount to generate:', components: [row] });
     }
 
-    // --- /bulk-gen Miktar Seçimi ---
+    // --- /bulk-gen Amount Selection ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_amt_')) {
       const parts = interaction.customId.split('_');
       const amount = parts[2];
-      const ownerId = parts[3];
 
       const yearSelect = new StringSelectMenuBuilder()
         .setCustomId(`bulk_year_${amount}_${interaction.user.id}`)
-        .setPlaceholder('Hesap Açılış Yılını Seçin (2006 - 2016)')
+        .setPlaceholder('Select Account Creation Year (2006 - 2016)')
         .addOptions(Array.from({ length: 11 }, (_, i) => {
           const year = (2006 + i).toString();
-          return { label: year, value: year, description: `${year} yılında oluşturulan hesaplar` };
+          return { label: year, value: year, description: `Accounts created in ${year}` };
         }));
 
       return await interaction.editReply({
-        content: `Seçilen Miktar: **${amount}**\nLütfen açılış yılını seçin:`,
+        content: `Selected Amount: **${amount}**\nPlease select the creation year:`,
         components: [new ActionRowBuilder().addComponents(yearSelect)]
       });
     }
 
-    // --- /bulk-gen Yıl Seçimi ---
+    // --- /bulk-gen Year Selection ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('bulk_year_')) {
       const parts = interaction.customId.split('_');
       const amount = parts[2];
-      const ownerId = parts[3];
 
       const selectedYear = interaction.values[0];
       const row1 = new ActionRowBuilder().addComponents(
@@ -279,42 +276,36 @@ client.on('interactionCreate', async (interaction) => {
         new ButtonBuilder().setCustomId(`bulk_gen_4_number_method_${selectedYear}_${amount}_${interaction.user.id}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
       );
 
-      return await interaction.editReply({ content: `Seçilen Yıl: **${selectedYear}** | Miktar: **${amount}**\nLütfen kullanıcı adı desenini seçin:`, components: [row1, row2] });
+      return await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row1, row2] });
     }
 
-    // --- /bulk-gen Hesap Üretim Süreci ---
+    // --- /bulk-gen Account Generation Process ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
       let targetYear = '';
       let amount = 0;
-      let ownerId = '';
 
       if (parts[2] === 'cross' && parts[3] === 'user') {
         filterType = 'cross_user';
         targetYear = parts[4];
         amount = parseInt(parts[5]);
-        ownerId = parts[6];
       } else if (parts[2] === 'double' && parts[3] === 'user') {
         filterType = 'double_user';
         targetYear = parts[4];
         amount = parseInt(parts[5]);
-        ownerId = parts[6];
       } else if (parts[2] === 'year' && parts[3] === 'user') {
         filterType = 'year_user';
         targetYear = parts[4];
         amount = parseInt(parts[5]);
-        ownerId = parts[6];
       } else if (parts[3] === 'method') {
         filterType = `${parts[2]}_method`;
         targetYear = parts[4];
         amount = parseInt(parts[5]);
-        ownerId = parts[6];
       } else if (parts[4] === 'method') {
         filterType = `${parts[2]}_${parts[3]}_method`;
         targetYear = parts[5];
         amount = parseInt(parts[6]);
-        ownerId = parts[7];
       }
 
       const key = `bulk_${targetYear}_${filterType}`;
@@ -322,7 +313,7 @@ client.on('interactionCreate', async (interaction) => {
       const stock = db[key] || [];
 
       if (stock.length < amount) {
-        return await interaction.editReply({ content: `❌ Toplu üretim için yeterli stok yok! Mevcut stok: **${stock.length}**`, components: [] });
+        return await interaction.editReply({ content: `❌ Not enough stock for bulk generation! Current stock: **${stock.length}**`, components: [] });
       }
 
       const generatedAccounts = [];
@@ -336,34 +327,34 @@ client.on('interactionCreate', async (interaction) => {
       userGenCount.set(interaction.user.id, currentCount);
 
       const embeds = generatedAccounts.map((accountData, index) => {
-        const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Herkese Açık';
-        const statusText = accountData.isBanned ? '🔴 Yasaklı' : '🟢 Aktif';
+        const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Public';
+        const statusText = accountData.isBanned ? '🔴 Banned' : '🟢 Active';
         
         return new EmbedBuilder()
-          .setTitle(`👑 TOPLU PREMİUM HESAP #${index + 1}`)
+          .setTitle(`👑 BULK PREMIUM ACCOUNT #${index + 1}`)
           .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
           .setColor('#2F3136')
           .setThumbnail(accountData.avatarUrl)
           .addFields(
-            { name: '👤 Kullanıcı Adı', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
-            { name: '📅 Oluşturulma Tarihi', value: `\`${accountData.createdDate}\``, inline: true },
-            { name: '🛡️ Durum', value: statusText, inline: true },
-            { name: '🌐 Son Aktivite', value: `\`${accountData.lastOnline || 'Çevrimdışı'}\``, inline: true },
-            { name: '🎒 Envanter', value: `\`${isPublic}\``, inline: false }
+            { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
+            { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+            { name: '🛡️ Status', value: statusText, inline: true },
+            { name: '🌐 Last Activity', value: `\`${accountData.lastOnline || 'Offline'}\``, inline: true },
+            { name: '🎒 Inventory', value: `\`${isPublic}\``, inline: false }
           )
-          .setFooter({ text: `RadarBlox Premium Toplu • Toplam Üretim: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
+          .setFooter({ text: `RadarBlox Premium Bulk • Total Generations: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
           .setTimestamp();
       });
 
       try {
         await interaction.user.send({ embeds: embeds });
-        await interaction.editReply({ content: '✅ Hesaplar başarıyla DM adresinize gönderildi!', components: [] });
+        await interaction.editReply({ content: '✅ Accounts successfully sent to your DMs!', components: [] });
       } catch (e) {
-        await interaction.editReply({ content: '❌ Lütfen DM kutunuzu açın!', components: [] });
+        await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
       }
     }
 
-    // --- /gen Yıl Seçimi ---
+    // --- /gen Year Selection ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
       const selectedYear = interaction.values[0];
       const ownerId = interaction.customId.split('_')[2];
@@ -381,38 +372,32 @@ client.on('interactionCreate', async (interaction) => {
       );
 
       return await interaction.editReply({ 
-        content: `Seçilen Yıl: **${selectedYear}**\nŞimdi bir kullanıcı adı deseni seçin:`, 
+        content: `Selected Year: **${selectedYear}**\nNow select a username pattern:`, 
         components: [row1, row2] 
       });
     }
 
-    // --- /gen Hesap Üretim Süreci ---
+    // --- /gen Account Generation Process ---
     if (interaction.isButton() && interaction.customId.startsWith('gen_')) {
       const parts = interaction.customId.split('_');
       let filterType = '';
       let targetYear = '';
-      let ownerId = '';
 
       if (parts[1] === 'cross' && parts[2] === 'user') {
         filterType = 'cross_user';
         targetYear = parts[3];
-        ownerId = parts[4];
       } else if (parts[1] === 'double' && parts[2] === 'user') {
         filterType = 'double_user';
         targetYear = parts[3];
-        ownerId = parts[4];
       } else if (parts[1] === 'year' && parts[2] === 'user') {
         filterType = 'year_user';
         targetYear = parts[3];
-        ownerId = parts[4];
       } else if (parts[2] === 'method') {
         filterType = `${parts[1]}_method`;
         targetYear = parts[3];
-        ownerId = parts[4];
       } else if (parts[3] === 'method') {
         filterType = `${parts[1]}_${parts[2]}_method`;
         targetYear = parts[4];
-        ownerId = parts[5];
       }
 
       const key = `gen_${targetYear}_${filterType}`;
@@ -420,7 +405,7 @@ client.on('interactionCreate', async (interaction) => {
       const stock = db[key] || [];
 
       if (stock.length === 0) {
-        return await interaction.editReply({ content: `❌ **${targetYear} - ${filterType}** için stok tükendi. Lütfen yeni hesapların eklenmesini bekleyin.`, components: [] });
+        return await interaction.editReply({ content: `❌ Out of stock for **${targetYear} - ${filterType}**. Please wait for new accounts to be added.`, components: [] });
       }
 
       const accountData = stock.shift();
@@ -430,53 +415,53 @@ client.on('interactionCreate', async (interaction) => {
       const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
       userGenCount.set(interaction.user.id, currentCount);
 
-      const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Herkese Açık';
-      const statusText = accountData.isBanned ? '🔴 Yasaklı' : '🟢 Aktif';
+      const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Public';
+      const statusText = accountData.isBanned ? '🔴 Banned' : '🟢 Active';
 
       const embed = new EmbedBuilder()
-        .setTitle('👑 PREMİUM HESAP ÜRETİLDİ')
+        .setTitle('👑 PREMIUM ACCOUNT GENERATED')
         .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
         .setColor('#2F3136')
         .setThumbnail(accountData.avatarUrl)
         .addFields(
-          { name: '👤 Kullanıcı Adı', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
-          { name: '📅 Oluşturulma Tarihi', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Durum', value: statusText, inline: true },
-          { name: '🌐 Son Aktivite', value: `\`${accountData.lastOnline || 'Çevrimdışı'}\``, inline: true },
-          { name: '🎒 Envanter', value: `\`${isPublic}\``, inline: false }
+          { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+          { name: '🛡️ Status', value: statusText, inline: true },
+          { name: '🌐 Last Activity', value: `\`${accountData.lastOnline || 'Offline'}\``, inline: true },
+          { name: '🎒 Inventory', value: `\`${isPublic}\``, inline: false }
         )
-        .setFooter({ text: `RadarBlox Premium • Toplam Üretim: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
+        .setFooter({ text: `RadarBlox Premium • Total Generations: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
         .setTimestamp();
 
       try {
         await interaction.user.send({ embeds: [embed] });
-        await interaction.editReply({ content: '✅ Hesap başarıyla DM adresinize gönderildi!', components: [] });
+        await interaction.editReply({ content: '✅ Account successfully sent to your DMs!', components: [] });
       } catch (e) {
-        db[key].unshift(accountData); // Hata olursa stoku geri ekle
+        db[key].unshift(accountData); // Return stock if sending fails
         saveDB();
-        return await interaction.editReply({ content: '❌ Lütfen DM kutunuzu açın!', components: [] });
+        return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
       }
     }
 
   } catch (err) {
-    console.error('Etkileşim hatası:', err);
+    console.error('Interaction error:', err);
     try {
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: '❌ Bu komut işlenirken bir hata oluştu.', components: [] }).catch(() => {});
+        await interaction.editReply({ content: '❌ An error occurred while processing this command.', components: [] }).catch(() => {});
       } else {
-        await interaction.reply({ content: '❌ Bu komut işlenirken bir hata oluştu.' }).catch(() => {});
+        await interaction.reply({ content: '❌ An error occurred while processing this command.' }).catch(() => {});
       }
     } catch {}
   }
 });
 
 if (!TOKEN) {
-  console.error("KRİTİK HATA: DISCORD_TOKEN tanımlı değil veya boş!");
+  console.error("CRITICAL ERROR: DISCORD_TOKEN is not defined or empty!");
 } else {
-  console.log("Discord'a bağlanılıyor... Token uzunluğu:", TOKEN.length);
+  console.log("Connecting to Discord... Token length:", TOKEN.length);
   client.login(TOKEN)
-    .then(() => console.log("Discord login başarılı!"))
+    .then(() => console.log("Discord login successful!"))
     .catch(err => {
-      console.error("DISCORD BAĞLANTI HATASI DETAYI:", err);
+      console.error("DISCORD CONNECTION ERROR DETAIL:", err);
     });
 }
