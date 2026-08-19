@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Filtreli Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Off-Sale & Eşyalı Filtreli Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -115,7 +115,7 @@ async function main() {
         }
       }));
       
-      // Sadece değerli (eşyalı) hesap bulunduğunda konsola yazdır
+      // SADECE EŞYALI VEYA OFF-SALE HESAPLAR KONSOLA YAZDIRILACAK (NORMALLER GİZLENDİ)
       if (isOffSaleAccount || itemCount > 0) {
         console.log(`[BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'EŞYALI'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
       }
