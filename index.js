@@ -37,7 +37,7 @@ const ALLOWED_USER_ID = '1417227496251981895'; // Sadece bu ID /guide komutunu v
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 // ==========================================================================
-// 🛠️ REHBER MENÜSÜNDEKİ SEÇENEKLERİ VE YAZILARINI BURADAN ÖZELLEŞTİREBİLİRSİN
+// 🛠️ REHBER MENÜSÜNDEKİ SEÇENEKLERİ VE DETAY YAZILARINI BURADAN DÜZENLEYEBİLİRSİN
 // ==========================================================================
 const GUIDE_SELECT_OPTIONS = [
   {
@@ -75,7 +75,6 @@ const GUIDE_SELECT_OPTIONS = [
     emoji: '❌',
     responseText: '❌ **Cross Method Detayları:**\n- Çapraz eşleşen kullanıcı adı bulma yöntemidir.'
   }
-  // İstersen buraya virgül koyarak fotoğraftaki gibi diğer yöntemleri de ekleyebilirsin!
 ];
 
 const userGenCount = new Map();
@@ -173,16 +172,16 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
         }
 
-        // /guide komutu çalışınca önce ana açıklamayı yazmak için Modal (form) açıyoruz
+        // /guide komutu hatasız doğrudan modal (form) açar
         const modal = new ModalBuilder()
           .setCustomId('guide_main_modal')
-          .setTitle('Create Guide Message');
+          .setTitle('Create Custom Guide Panel');
 
         const messageInput = new TextInputBuilder()
           .setCustomId('guide_main_text')
-          .setLabel('Enter main guide description:')
+          .setLabel('Enter custom guide description/text:')
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Type your main guide banner text here...')
+          .setPlaceholder('Buraya kendi ana rehber yazını yazabilirsin...')
           .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menu below to view specific methods and details.')
           .setRequired(true);
 
@@ -215,13 +214,12 @@ client.on('interactionCreate', async (interaction) => {
       const customIdParts = interaction.customId.split('_');
       const ownerId = customIdParts[customIdParts.length - 1];
 
-      // Yetki kontrolü (Rehber işlemleri sadece yetkiliye veya menü etkileşimlerine açık)
       if (interaction.customId === 'guide_main_modal' || interaction.customId.startsWith('setup_')) {
         if (interaction.user.id !== ALLOWED_USER_ID) {
           return await interaction.reply({ content: '❌ You do not have permission to use this!', ephemeral: true });
         }
       } else if (interaction.customId.startsWith('guide_menu_select')) {
-        // Herkes bu menüyü kullanıp detay görebilir, yetki kısıtlaması yok
+        // Herkes menüyü kullanabilir
       } else if (ownerId && ownerId !== interaction.user.id && !interaction.customId.startsWith('action_')) {
         return await interaction.reply({ 
           content: '❌ You cannot use this menu or buttons as you did not run the command!', 
@@ -236,7 +234,7 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /guide Modal Submit (Send Embed + Select Menu to Current Channel) ---
+    // --- /guide Modal Submit (Send Embed + Custom Select Menu) ---
     if (interaction.isModalSubmit() && interaction.customId === 'guide_main_modal') {
       const mainText = interaction.fields.getTextInputValue('guide_main_text');
       const channel = interaction.channel;
@@ -245,14 +243,13 @@ client.on('interactionCreate', async (interaction) => {
         return await interaction.reply({ content: '❌ Error: Channel not found!', ephemeral: true });
       }
 
-      // Embed tasarımı
       const guideEmbed = new EmbedBuilder()
         .setTitle('📌 Available Methods & Guide')
         .setDescription(mainText)
         .setColor('#2F3136')
         .setTimestamp();
 
-      // Fotoğraftakine benzer Açılır Menü (Select Menu) oluşturuluyor
+      // Yukarıdaki GUIDE_SELECT_OPTIONS dizisinden özel menüyü oluşturur
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('guide_menu_select')
         .setPlaceholder('Make a selection...')
@@ -272,17 +269,16 @@ client.on('interactionCreate', async (interaction) => {
         components: [row]
       });
 
-      return await interaction.reply({ content: '✅ Interactive guide panel successfully sent to this channel!', ephemeral: true });
+      return await interaction.reply({ content: '✅ Custom interactive guide panel successfully sent to this channel!', ephemeral: true });
     }
 
-    // --- Guide Select Menu Interaction (Show Selected Method Text) ---
+    // --- Guide Select Menu Interaction ---
     if (interaction.isStringSelectMenu() && interaction.customId === 'guide_menu_select') {
       const selectedValue = interaction.values[0];
       const selectedOption = GUIDE_SELECT_OPTIONS.find(opt => opt.value === selectedValue);
 
       const responseText = selectedOption ? selectedOption.responseText : '❌ Content not found.';
 
-      // Kullanıcı menüden bir seçenek seçtiğinde sadece kendisine görünen (ephemeral) gizli mesajla o yöntemin yazısı gösterilir
       return await interaction.reply({
         content: responseText,
         ephemeral: true
