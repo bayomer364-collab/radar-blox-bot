@@ -37,30 +37,45 @@ const ALLOWED_USER_ID = '1417227496251981895'; // Sadece bu ID /guide komutunu v
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 // ==========================================================================
-// 🛠️ REHBER BUTONLARINI VE İÇERİKLERİNİ BURADAN ÖZELLEŞTİREBİLİRSİN
+// 🛠️ REHBER MENÜSÜNDEKİ SEÇENEKLERİ VE YAZILARINI BURADAN ÖZELLEŞTİREBİLİRSİN
 // ==========================================================================
-const GUIDE_BUTTONS = [
+const GUIDE_SELECT_OPTIONS = [
   {
-    customId: 'guide_btn_methods',
-    label: 'Available Methods',
-    style: ButtonStyle.Primary,
-    emoji: '📘',
-    modalTitle: 'Edit: Available Methods',
-    modalLabel: 'Enter the methods description:',
-    placeholder: '123 Method - Description...\n2 Number Method - Description...',
-    defaultText: '🔢 **123 Method** - Usernames with 123 at the end or start\n💡 **2 Number Method** - Usernames that contain 2 numbers\n🔄 **321 Method** - Usernames with 321 at the end or start'
+    label: '123 Method',
+    description: 'Usernames with 123 at the end or start',
+    value: 'guide_method_123',
+    emoji: '🔢',
+    responseText: '🔢 **123 Method Detayları:**\n- Kullanıcı adının başında veya sonunda 123 olmalıdır.\n- Örnek: `123john`, `alex123`'
   },
   {
-    customId: 'guide_btn_rules',
-    label: 'Rules & Info',
-    style: ButtonStyle.Secondary,
-    emoji: '⚠️',
-    modalTitle: 'Edit: Rules & Info',
-    modalLabel: 'Enter server rules:',
-    placeholder: 'Type your rules here...',
-    defaultText: '1. Be respectful to everyone.\n2. Do not spam in channels.\n3. Enjoy your accounts!'
+    label: '2 Number Method',
+    description: 'Usernames that contain 2 numbers',
+    value: 'guide_method_2num',
+    emoji: '💡',
+    responseText: '💡 **2 Number Method Detayları:**\n- Kullanıcı adının içinde rastgele 2 adet rakam bulunur.\n- Örnek: `pro99gamer`'
+  },
+  {
+    label: '321 Method',
+    description: 'Usernames with 321 at the end or start',
+    value: 'guide_method_321',
+    emoji: '🔄',
+    responseText: '🔄 **321 Method Detayları:**\n- Kullanıcı adının başında veya sonunda 321 yer alır.'
+  },
+  {
+    label: '4 Number Method',
+    description: 'Usernames with 4 numbers inside',
+    value: 'guide_method_4num',
+    emoji: '🎰',
+    responseText: '🎰 **4 Number Method Detayları:**\n- 4 haneli sayı içeren hesaplar için geçerli kural ve taktikler.'
+  },
+  {
+    label: 'Cross Method',
+    description: 'Cross pattern username rules',
+    value: 'guide_method_cross',
+    emoji: '❌',
+    responseText: '❌ **Cross Method Detayları:**\n- Çapraz eşleşen kullanıcı adı bulma yöntemidir.'
   }
-  // İstersen buraya virgül koyup yeni butonlar ekleyebilirsin!
+  // İstersen buraya virgül koyarak fotoğraftaki gibi diğer yöntemleri de ekleyebilirsin!
 ];
 
 const userGenCount = new Map();
@@ -136,7 +151,7 @@ const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
   new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
   new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
-  new SlashCommandBuilder().setName('guide').setDescription('Creates the guide message sending panel.')
+  new SlashCommandBuilder().setName('guide').setDescription('Creates the interactive guide message panel.')
 ];
 
 client.once('ready', async () => {
@@ -158,23 +173,21 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
         }
 
-        // Yukarılarda tanımladığımız butonları panel oluşturma mesajına ekliyoruz
-        const row = new ActionRowBuilder();
-        GUIDE_BUTTONS.forEach(btn => {
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(`setup_${btn.customId}`)
-              .setLabel(btn.label)
-              .setStyle(btn.style)
-              .setEmoji(btn.emoji)
-          );
-        });
+        // /guide komutu çalışınca önce ana açıklamayı yazmak için Modal (form) açıyoruz
+        const modal = new ModalBuilder()
+          .setCustomId('guide_main_modal')
+          .setTitle('Create Guide Message');
 
-        return await interaction.reply({
-          content: '📌 Click a button below to customize and send that guide block to **this channel**:',
-          components: [row],
-          ephemeral: true
-        });
+        const messageInput = new TextInputBuilder()
+          .setCustomId('guide_main_text')
+          .setLabel('Enter main guide description:')
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder('Type your main guide banner text here...')
+          .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menu below to view specific methods and details.')
+          .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
+        return await interaction.showModal(modal);
       }
 
       const now = Date.now();
@@ -202,11 +215,13 @@ client.on('interactionCreate', async (interaction) => {
       const customIdParts = interaction.customId.split('_');
       const ownerId = customIdParts[customIdParts.length - 1];
 
-      // Guide yetki kontrolü
-      if (interaction.customId.startsWith('setup_') || interaction.customId.startsWith('modal_')) {
+      // Yetki kontrolü (Rehber işlemleri sadece yetkiliye veya menü etkileşimlerine açık)
+      if (interaction.customId === 'guide_main_modal' || interaction.customId.startsWith('setup_')) {
         if (interaction.user.id !== ALLOWED_USER_ID) {
           return await interaction.reply({ content: '❌ You do not have permission to use this!', ephemeral: true });
         }
+      } else if (interaction.customId.startsWith('guide_menu_select')) {
+        // Herkes bu menüyü kullanıp detay görebilir, yetki kısıtlaması yok
       } else if (ownerId && ownerId !== interaction.user.id && !interaction.customId.startsWith('action_')) {
         return await interaction.reply({ 
           content: '❌ You cannot use this menu or buttons as you did not run the command!', 
@@ -214,62 +229,64 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
-      if ((interaction.isButton() || interaction.isStringSelectMenu()) && !interaction.customId.startsWith('setup_')) {
+      if (interaction.isButton() || (interaction.isStringSelectMenu() && !interaction.customId.startsWith('guide_menu_select'))) {
         if (!interaction.deferred && !interaction.replied) {
           await interaction.deferUpdate().catch(() => {});
         }
       }
     }
 
-    // --- /guide Button Click (Open Specific Modal) ---
-    if (interaction.isButton() && interaction.customId.startsWith('setup_')) {
-      const rawCustomId = interaction.customId.replace('setup_', '');
-      const btnConfig = GUIDE_BUTTONS.find(b => b.customId === rawCustomId);
-
-      if (!btnConfig) {
-        return await interaction.reply({ content: '❌ Configuration not found!', ephemeral: true });
-      }
-
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_${rawCustomId}`)
-        .setTitle(btnConfig.modalTitle);
-
-      const messageInput = new TextInputBuilder()
-        .setCustomId('guide_text_input')
-        .setLabel(btnConfig.modalLabel)
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder(btnConfig.placeholder)
-        .setValue(btnConfig.defaultText) // Varsayılan metni düzenleyebilir olarak getirir
-        .setRequired(true);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
-      return await interaction.showModal(modal);
-    }
-
-    // --- /guide Modal Submit (Send Embed to Current Channel) ---
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_')) {
-      const rawCustomId = interaction.customId.replace('modal_', '');
-      const btnConfig = GUIDE_BUTTONS.find(b => b.customId === rawCustomId);
-      const enteredText = interaction.fields.getTextInputValue('guide_text_input');
-
-      // Komutun çalıştırıldığı kanalı doğrudan alıyoruz
+    // --- /guide Modal Submit (Send Embed + Select Menu to Current Channel) ---
+    if (interaction.isModalSubmit() && interaction.customId === 'guide_main_modal') {
+      const mainText = interaction.fields.getTextInputValue('guide_main_text');
       const channel = interaction.channel;
 
       if (!channel) {
         return await interaction.reply({ content: '❌ Error: Channel not found!', ephemeral: true });
       }
 
+      // Embed tasarımı
       const guideEmbed = new EmbedBuilder()
-        .setTitle(`📌 ${btnConfig.label}`)
-        .setDescription(enteredText)
+        .setTitle('📌 Available Methods & Guide')
+        .setDescription(mainText)
         .setColor('#2F3136')
         .setTimestamp();
 
+      // Fotoğraftakine benzer Açılır Menü (Select Menu) oluşturuluyor
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('guide_menu_select')
+        .setPlaceholder('Make a selection...')
+        .addOptions(
+          GUIDE_SELECT_OPTIONS.map(opt => ({
+            label: opt.label,
+            description: opt.description,
+            value: opt.value,
+            emoji: opt.emoji
+          }))
+        );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
       await channel.send({
-        embeds: [guideEmbed]
+        embeds: [guideEmbed],
+        components: [row]
       });
 
-      return await interaction.reply({ content: '✅ Guide message successfully sent to this channel!', ephemeral: true });
+      return await interaction.reply({ content: '✅ Interactive guide panel successfully sent to this channel!', ephemeral: true });
+    }
+
+    // --- Guide Select Menu Interaction (Show Selected Method Text) ---
+    if (interaction.isStringSelectMenu() && interaction.customId === 'guide_menu_select') {
+      const selectedValue = interaction.values[0];
+      const selectedOption = GUIDE_SELECT_OPTIONS.find(opt => opt.value === selectedValue);
+
+      const responseText = selectedOption ? selectedOption.responseText : '❌ Content not found.';
+
+      // Kullanıcı menüden bir seçenek seçtiğinde sadece kendisine görünen (ephemeral) gizli mesajla o yöntemin yazısı gösterilir
+      return await interaction.reply({
+        content: responseText,
+        ephemeral: true
+      });
     }
 
     // --- /stock COMMAND ---
