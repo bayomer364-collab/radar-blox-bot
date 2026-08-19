@@ -172,7 +172,7 @@ const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
   new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
   new SlashCommandBuilder().setName('offsale-gen').setDescription('Generates a premium off-sale account with min 2 items.'),
-  new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
+  new SlashCommandBuilder().setName('stock').setDescription('Shows current interactive pool stocks.'),
   new SlashCommandBuilder().setName('guide').setDescription('Creates the interactive guide message panel.')
 ].map(command => command.toJSON());
 
@@ -322,55 +322,118 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /stock COMMAND ---
+    // ==========================================================================
+    // 📊 /stock COMMAND (INTERACTIVE PANEL)
+    // ==========================================================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
+      const categorySelect = new StringSelectMenuBuilder()
+        .setCustomId(`stock_cat_${interaction.user.id}`)
+        .setPlaceholder('Select Stock Category')
+        .addOptions([
+          { label: 'Gen Stock', value: 'gen', description: 'View single gen stock counts' },
+          { label: 'Bulk-Gen Stock', value: 'bulk', description: 'View bulk gen stock counts' },
+          { label: 'Offsale Gen Stock', value: 'offsale', description: 'View offsale gen stock counts' }
+        ]);
+
+      return await interaction.editReply({
+        content: '📊 **Stock Panel:** Please select a category to inspect:',
+        components: [new ActionRowBuilder().addComponents(categorySelect)]
+      });
+    }
+
+    // --- /stock Category Selection ---
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('stock_cat_')) {
+      const category = interaction.values[0];
+      const ownerId = interaction.customId.split('_')[2];
+
+      const yearSelect = new StringSelectMenuBuilder()
+        .setCustomId(`stock_year_${category}_${ownerId}`)
+        .setPlaceholder('Select Year (2006 - 2016)')
+        .addOptions(Array.from({ length: 11 }, (_, i) => {
+          const year = (2006 + i).toString();
+          return { label: year, value: year, description: `View stocks for ${year}` };
+        }));
+
+      return await interaction.editReply({
+        content: `Category: **${category.toUpperCase()}**\nNow select the creation year:`,
+        components: [new ActionRowBuilder().addComponents(yearSelect)]
+      });
+    }
+
+    // --- /stock Year Selection ---
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('stock_year_')) {
+      const parts = interaction.customId.split('_');
+      const category = parts[2];
+      const ownerId = parts[3];
+      const selectedYear = interaction.values[0];
+
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_cross_user_${ownerId}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_double_user_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_year_user_${ownerId}`).setLabel('year_user').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_123_method_${ownerId}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_321_method_${ownerId}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_2_number_method_${ownerId}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_4_number_method_${ownerId}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
+      );
+
+      return await interaction.editReply({
+        content: `Category: **${category.toUpperCase()}** | Year: **${selectedYear}**\nNow select the method/pattern to view exact stock:`,
+        components: [row1, row2]
+      });
+    }
+
+    // --- /stock Final View Result ---
+    if (interaction.isButton() && interaction.customId.startsWith('stock_view_')) {
+      const parts = interaction.customId.split('_');
+      // stock_view_ [category] _ [year] _ [filterPart1] ... _ [ownerId]
+      const category = parts[2];
+      const targetYear = parts[3];
+      
+      let filterType = '';
+      let ownerId = '';
+
+      if (parts[4] === 'cross' && parts[5] === 'user') {
+        filterType = 'cross_user';
+        ownerId = parts[6];
+      } else if (parts[4] === 'double' && parts[5] === 'user') {
+        filterType = 'double_user';
+        ownerId = parts[6];
+      } else if (parts[4] === 'year' && parts[5] === 'user') {
+        filterType = 'year_user';
+        ownerId = parts[6];
+      } else if (parts[5] === 'method') {
+        filterType = `${parts[4]}_method`;
+        ownerId = parts[6];
+      } else if (parts[6] === 'method') {
+        filterType = `${parts[4]}_${parts[5]}_method`;
+        ownerId = parts[7];
+      }
+
+      let prefix = 'gen';
+      if (category === 'bulk') prefix = 'bulk';
+      if (category === 'offsale') prefix = 'offsale';
+
+      const key = `${prefix}_${targetYear}_${filterType}`;
       const db = getDB();
-      const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
-      const filterTypes = ['cross_user', 'double_user', 'year_user', '123_method', '321_method', '2_number_method', '4_number_method'];
-
-      const yearsPart1 = years.slice(0, 6);
-      const yearsPart2 = years.slice(6);
-
-      let genText1 = '', bulkText1 = '', offsaleText1 = '';
-      let genText2 = '', bulkText2 = '', offsaleText2 = '';
-
-      for (const year of yearsPart1) {
-        for (const filter of filterTypes) {
-          const genCount = (db[`gen_${year}_${filter}`] || []).length;
-          const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
-          const offsaleCount = (db[`offsale_${year}_${filter}`] || []).length;
-          genText1 += `• **${year}** ${filter}: \`${genCount}\`\n`;
-          bulkText1 += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
-          offsaleText1 += `• **${year}** ${filter}: \`${offsaleCount}\`\n`;
-        }
-      }
-
-      for (const year of yearsPart2) {
-        for (const filter of filterTypes) {
-          const genCount = (db[`gen_${year}_${filter}`] || []).length;
-          const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
-          const offsaleCount = (db[`offsale_${year}_${filter}`] || []).length;
-          genText2 += `• **${year}** ${filter}: \`${genCount}\`\n`;
-          bulkText2 += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
-          offsaleText2 += `• **${year}** ${filter}: \`${offsaleCount}\`\n`;
-        }
-      }
+      const stockArray = db[key] || [];
 
       const embed = new EmbedBuilder()
-        .setTitle('📊 Detailed Stock Status (2006 - 2016)')
-        .setColor('#2F3136')
+        .setTitle(`📦 Stock Information: ${category.toUpperCase()} (${targetYear})`)
+        .setColor('#00FFCC')
         .addFields(
-          { name: '🔹 Gen (2006-11)', value: genText1.slice(0, 1024), inline: true },
-          { name: '🔸 Bulk (2006-11)', value: bulkText1.slice(0, 1024), inline: true },
-          { name: '👑 Offsale (2006-11)', value: offsaleText1.slice(0, 1024), inline: true },
-          { name: '\u200B', value: '\u200B', inline: false },
-          { name: '🔹 Gen (2012-16)', value: genText2.slice(0, 1024), inline: true },
-          { name: '🔸 Bulk (2012-16)', value: bulkText2.slice(0, 1024), inline: true },
-          { name: '👑 Offsale (2012-16)', value: offsaleText2.slice(0, 1024), inline: true }
+          { name: '🔍 Method / Pattern', value: `\`${filterType}\``, inline: true },
+          { name: '📊 Available Stock', value: `**${stockArray.length}** accounts`, inline: true }
         )
         .setTimestamp();
 
-      return await interaction.editReply({ content: '', embeds: [embed] });
+      return await interaction.editReply({
+        content: `✅ Here is your exact stock result:`,
+        embeds: [embed],
+        components: []
+      });
     }
 
     // --- /gen COMMAND ---
