@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Düzeltilmiş Filtre Sıralaması ve Ultra Hızlı Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Tam Eşit Dağılımlı & Kurallı Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -14,6 +14,18 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 const addedAccountIds = new Set();
 const scannedIds = new Set();
+
+// TÜM METOTLAR - Eşit şansla taranması için liste
+const TARGET_METHODS = [
+  'year_user',
+  'cross_user',
+  'double_user',
+  '2_number_user',
+  '4_number_user',
+  '123_method',
+  '321_method'
+];
+let methodIndex = 0;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -30,49 +42,72 @@ function fetchJSON(url) {
   });
 }
 
-function validateUsernameByFilter(username) {
+// Verdiğin örneklere birebir uyarlanmış doğrulama fonksiyonu
+function validateUsernameByFilter(username, targetMethod) {
   const lowerName = username.toLowerCase();
-  
-  // 1. Cross Method (123isim123, isim123isim, 123isim123isim vb.) - En özel olanlar önce kontrol edilir
-  if (/^(\d{2,4})([a-z]+)\1$/.test(lowerName) || 
-      /^([a-z]+)(\d{2,4})\1$/.test(lowerName) || 
-      /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
-      /^([a-z]+)(\d{2,4})([a-z]+)\2$/.test(lowerName)) {
-    return 'cross_user';
-  }
 
-  // 2. Double Method (acc123123, 123123acc, acc19981998 vb.)
-  if (/([a-zA-Z]+)(\d{2,4})\2$/.test(lowerName) || /^(\d{2,4})\1([a-zA-Z]+)$/.test(lowerName)) {
-    return 'double_user';
-  }
+  switch (targetMethod) {
+    case 'year_user':
+      // Örnek: isim20007, isim200131, isim19981998 (1998-2026 arası yıl barındırmalı)
+      if (/(199\d|20[0-2]\d)\d*/.test(lowerName)) {
+        const match = lowerName.match(/(199\d|20[0-2]\d)/);
+        if (match) {
+          const yearVal = parseInt(match[1], 10);
+          if (yearVal >= 1998 && yearVal <= 2026) return 'year_user';
+        }
+      }
+      return null;
 
-  // 3. 123 Method (123, 1234, 123123 vb. başta veya sonda)
-  if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) {
-    return '123_method';
-  }
+    case 'cross_user':
+      // Örnek: 123isim123isim, 123isim123, isim123isim, isim123isim123
+      if (/^(\d{2,4})([a-z]+)\1(\2)?$/.test(lowerName) || 
+          /^([a-z]+)(\d{2,4})\1(\2)?$/.test(lowerName) ||
+          /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
+          /^([a-z]+)(\d{2,4})([a-z]+)\2$/.test(lowerName)) {
+        return 'cross_user';
+      }
+      return null;
 
-  // 4. 321 Method (321, 4321, 321321 vb. başta veya sonda)
-  if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) {
-    return '321_method';
-  }
+    case 'double_user':
+      // Örnek: İsim90909090, isim909090, isim9090 (Çifte tekrarlı sayılar)
+      if (/([a-zA-Z]+)(\d{2,4})\2{1,3}$/.test(lowerName)) {
+        return 'double_user';
+      }
+      return null;
 
-  // 5. Year Method (1999 - 2026 arası geçerli yıllar)
-  const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
-  if (yearMatch) {
-    const yearVal = parseInt(yearMatch[1], 10);
-    if (yearVal >= 1999 && yearVal <= 2026) {
-      return 'year_user';
-    }
-  }
+    case '2_number_user':
+      // Örnek: Sonunda rastgele 2 sayı olan isimler
+      if (/[a-zA-Z]+\d{2}$/.test(lowerName)) {
+        return '2_number_user';
+      }
+      return null;
 
-  // 6. Sayı Adedi Bazlı Filtreler (En sonda incelenir ki diğerlerini yutmasın)
-  const digits = lowerName.match(/\d/g);
-  if (digits) {
-    if (digits.length === 2) return '2_number_method';
-    if (digits.length === 4) return '4_number_method';
-  }
+    case '4_number_user':
+      // Örnek: Sonunda rastgele 4 sayı olan isimler
+      if (/[a-zA-Z]+\d{4}$/.test(lowerName)) {
+        return '4_number_user';
+      }
+      return null;
 
-  return null;
+    case '123_method':
+      // Örnek: isim123123, isim123, isim1234, isim12341234
+      if (/[a-zA-Z]+(123|1234|123123|12341234)+$/.test(lowerName) || 
+          /^(123|1234|123123)[a-zA-Z]+$/.test(lowerName)) {
+        return '123_method';
+      }
+      return null;
+
+    case '321_method':
+      // Örnek: isim321, isim321321
+      if (/[a-zA-Z]+(321|321321)+$/.test(lowerName) || 
+          /^(321|321321)[a-zA-Z]+$/.test(lowerName)) {
+        return '321_method';
+      }
+      return null;
+
+    default:
+      return null;
+  }
 }
 
 async function sendWebhook(payload) {
@@ -91,6 +126,9 @@ async function sendWebhook(payload) {
 async function main() {
   while (true) {
     try {
+      // Round-Robin mantığıyla sıradaki hedef metotu al
+      const currentMethod = TARGET_METHODS[methodIndex];
+
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
       const randomOffset = Math.floor(Math.random() * 2000000); 
       const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
@@ -111,8 +149,13 @@ async function main() {
       if (addedAccountIds.has(accountIdStr)) continue;
 
       const username = res.data.name;
-      const matchedFilter = validateUsernameByFilter(username);
+      
+      // Sadece o an hedeflenen metoda uyan hesaplar kabul edilecek (Eşit Dağılım Garantisi)
+      const matchedFilter = validateUsernameByFilter(username, currentMethod);
       if (!matchedFilter) continue;
+
+      // Başarılı bulunduğunda listedeki bir sonraki metoda geç
+      methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
 
       addedAccountIds.add(accountIdStr);
 
@@ -144,9 +187,9 @@ async function main() {
         }
       }));
       
-      console.log(`[HIZLI GEN] Metot: ${matchedFilter} | Hesap: ${username}`);
+      console.log(`[EŞİT GEN BAŞARILI] Hedeflenen Metot: ${matchedFilter} | Hesap: ${username}`);
       
-      await sleep(10);
+      await sleep(15);
 
     } catch (err) {
       console.error('[HATA]:', err);
