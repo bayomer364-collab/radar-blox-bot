@@ -127,15 +127,21 @@ function fetchJSON(url) {
 
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
+  
   const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
   if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
-  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) return 'year_user';
+  
+  // Sadece gerçek 1999-2026 yılları arasındaki yılları yakalayacak şekilde düzeltildi:
+  if (/([a-zA-Z]+)(199[9]|20[0-1][0-9]|202[0-6])(\d*)/.test(lowerName)) return 'year_user';
+  
   if (/(\d{2})\1/.test(lowerName)) return 'double_user';
   if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
+  
   const digits = lowerName.match(/\d/g);
   if (digits && digits.length === 2) return '2_number_method';
   if (digits && digits.length === 4) return '4_number_method';
+  
   return null;
 }
 
@@ -373,57 +379,37 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
+    // Yıl seçildiğinde ayrı ayrı metod butonu sormak yerine tüm metodların stoklarını direkt gösteren güncelleme:
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('stock_year_')) {
       const parts = interaction.customId.split('_');
       const category = parts[2];
-      const ownerId = parts[3];
       const selectedYear = interaction.values[0];
 
-      const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_cross_user_${ownerId}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_double_user_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_year_user_${ownerId}`).setLabel('year_user').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_123_method_${ownerId}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
-      );
-      const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_321_method_${ownerId}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_2_number_method_${ownerId}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`stock_view_${category}_${selectedYear}_4_number_method_${ownerId}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
-      );
-
-      return await interaction.editReply({
-        content: `Category: **${category.toUpperCase()}** | Year: **${selectedYear}**\nNow select the method/pattern to view exact stock:`,
-        components: [row1, row2]
-      });
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith('stock_view_')) {
-      const parts = interaction.customId.split('_');
-      const category = parts[2];
-      const targetYear = parts[3];
-      
-      let filterType = '';
-      if (parts[4] === 'cross' && parts[5] === 'user') filterType = 'cross_user';
-      else if (parts[4] === 'double' && parts[5] === 'user') filterType = 'double_user';
-      else if (parts[4] === 'year' && parts[5] === 'user') filterType = 'year_user';
-      else if (parts[5] === 'method') filterType = `${parts[4]}_method`;
-      else if (parts[6] === 'method') filterType = `${parts[4]}_${parts[5]}_method`;
-
       let prefix = category === 'bulk' ? 'bulk' : (category === 'offsale' ? 'offsale' : 'gen');
-      const key = `${prefix}_${targetYear}_${filterType}`;
       const db = getDB();
-      const stockArray = db[key] || [];
+
+      const methods = [
+        'cross_user',
+        'double_user',
+        'year_user',
+        '123_method',
+        '321_method',
+        '2_number_method',
+        '4_number_method'
+      ];
 
       const embed = new EmbedBuilder()
-        .setTitle(`📦 Stock Information: ${category.toUpperCase()} (${targetYear})`)
+        .setTitle(`📦 Stock Information: ${category.toUpperCase()} (${selectedYear})`)
         .setColor('#00FFCC')
-        .addFields(
-          { name: '🔍 Method / Pattern', value: `\`${filterType}\``, inline: true },
-          { name: '📊 Available Stock', value: `**${stockArray.length}** accounts`, inline: true }
-        )
         .setTimestamp();
 
-      return await interaction.editReply({ content: `✅ Here is your exact stock result:`, embeds: [embed], components: [] });
+      methods.forEach(method => {
+        const key = `${prefix}_${selectedYear}_${method}`;
+        const count = (db[key] || []).length;
+        embed.addFields({ name: `🔍 ${method}`, value: `**${count}** accounts`, inline: true });
+      });
+
+      return await interaction.editReply({ content: `✅ Here are all stocks for **${selectedYear}** under **${category.toUpperCase()}**:`, embeds: [embed], components: [] });
     }
 
     if (interaction.isChatInputCommand() && interaction.commandName === 'gen') {
