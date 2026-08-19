@@ -56,7 +56,7 @@ function saveDB() {
   });
 }
 
-// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER (Optimize Edildi)
+// 1. EXPRESS WEBHOOK & HEALTH CHECK SERVER
 const app = express();
 app.use(express.json());
 
@@ -158,31 +158,46 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /stock COMMAND ---
+    // --- /stock COMMAND (Karakter sınırına takılmayacak şekilde bölündü) ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
       const db = getDB();
       const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
       const filterTypes = ['cross_user', 'double_user', 'year_user', '123_method', '321_method', '2_number_method', '4_number_method'];
 
-      let genText = '';
-      let bulkText = '';
+      // Yılları iki gruba bölüyoruz (2006-2011 ve 2012-2016) böylece 1024 karakter sınırı aşılmıyor.
+      const yearsPart1 = years.slice(0, 6);   // 2006 - 2011
+      const yearsPart2 = years.slice(6);      // 2012 - 2016
 
-      for (const year of years) {
+      let genText1 = '', bulkText1 = '';
+      let genText2 = '', bulkText2 = '';
+
+      for (const year of yearsPart1) {
         for (const filter of filterTypes) {
           const genCount = (db[`gen_${year}_${filter}`] || []).length;
           const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
+          genText1 += `• **${year}** ${filter}: \`${genCount}\`\n`;
+          bulkText1 += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
+        }
+      }
 
-          genText += `• **${year}** ${filter}: \`${genCount}\`\n`;
-          bulkText += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
+      for (const year of yearsPart2) {
+        for (const filter of filterTypes) {
+          const genCount = (db[`gen_${year}_${filter}`] || []).length;
+          const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
+          genText2 += `• **${year}** ${filter}: \`${genCount}\`\n`;
+          bulkText2 += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
         }
       }
 
       const embed = new EmbedBuilder()
-        .setTitle('📊 Detailed Stock Status')
+        .setTitle('📊 Detailed Stock Status (2006 - 2016)')
         .setColor('#2F3136')
         .addFields(
-          { name: '🔹 Gen Pool', value: genText.slice(0, 1024), inline: true },
-          { name: '🔸 Bulk-Gen Pool', value: bulkText.slice(0, 1024), inline: true }
+          { name: '🔹 Gen Pool (2006-2011)', value: genText1.slice(0, 1024), inline: true },
+          { name: '🔸 Bulk-Gen Pool (2006-2011)', value: bulkText1.slice(0, 1024), inline: true },
+          { name: '\u200B', value: '\u200B', inline: false }, // Boşluk bırakarak alt alta şık durmasını sağlar
+          { name: '🔹 Gen Pool (2012-2016)', value: genText2.slice(0, 1024), inline: true },
+          { name: '🔸 Bulk-Gen Pool (2012-2016)', value: bulkText2.slice(0, 1024), inline: true }
         )
         .setTimestamp();
 
