@@ -20,4 +20,5 @@ jobs:
       - name: Run Generator
         run: node generator.js
         env:
+          WEBHOOK_URL: 'https://radar-blox-bot-production.up.railway.app/api/add-account'
           WEBHOOK_SECRET: 'GIZLI_SIFRE_12345'
