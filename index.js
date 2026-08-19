@@ -619,3 +619,146 @@ if (!TOKEN) {
       console.error("DISCORD CONNECTION ERROR DETAIL:", err);
     });
 }
+// ... (Önceki kodların aynen kalıyor, komut listesine /offsale-gen ekliyoruz)
+
+const OFF_SALE_ROLE_ID = '1539633713133125813';
+
+// 2. DISCORD BOT COMMANDS kısmını bununla değiştir:
+const commands = [
+  new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
+  new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
+  new SlashCommandBuilder().setName('offsale-gen').setDescription('Generates a premium off-sale account with min 2 items.'),
+  new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
+  new SlashCommandBuilder().setName('guide').setDescription('Creates the interactive guide message panel.')
+];
+
+// Webhook kısmına offsale desteği ekleyelim (app.post('/api/add-account', ...))
+app.post('/api/add-account', (req, res) => {
+  const { secret, targetYear, filterType, accountData, isOffSale } = req.body;
+  if (secret !== WEBHOOK_SECRET) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const db = getDB();
+  const prefix = isOffSale ? 'offsale' : 'gen';
+  const genKey = `${prefix}_${targetYear}_${filterType}`;
+  const bulkKey = `bulk_${targetYear}_${filterType}`; // Bulk yine ortak kalabilir veya isteğe göre ayrılabilir
+
+  if (!db[genKey]) db[genKey] = [];
+  if (!isOffSale && !db[bulkKey]) db[bulkKey] = [];
+
+  let added = false;
+  if (!db[genKey].some(acc => acc.id === accountData.id)) {
+    db[genKey].push(accountData);
+    added = true;
+  }
+  if (!isOffSale && !db[bulkKey].some(acc => acc.id === accountData.id)) {
+    db[bulkKey].push(accountData);
+    added = true;
+  }
+
+  if (added) saveDB();
+  return res.json({ success: true, stockCount: db[genKey].length });
+});
+
+// InteractionCreate içerisine eklenecek komut blokları:
+
+    // --- /offsale-gen COMMAND ---
+    if (interaction.isChatInputCommand() && interaction.commandName === 'offsale-gen') {
+      if (!interaction.member.roles.cache.has(OFF_SALE_ROLE_ID)) {
+        return await interaction.editReply({ content: '❌ You do not have the required role to use this command!' });
+      }
+
+      const yearSelect = new StringSelectMenuBuilder()
+        .setCustomId(`select_offsale_year_${interaction.user.id}`)
+        .setPlaceholder('Select Off-Sale Year (2006 - 2016)')
+        .addOptions(Array.from({ length: 11 }, (_, i) => {
+          const year = (2006 + i).toString();
+          return { label: year, value: year, description: `Off-sale accounts created in ${year}` };
+        }));
+
+      return await interaction.editReply({
+        content: 'Please select the account creation year for Off-Sale Gen:',
+        components: [new ActionRowBuilder().addComponents(yearSelect)]
+      });
+    }
+
+    // --- /offsale-gen Year Selection ---
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_offsale_year_')) {
+      const selectedYear = interaction.values[0];
+      const ownerId = interaction.customId.split('_')[3];
+
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`offsale_cross_user_${selectedYear}_${ownerId}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`offsale_double_user_${selectedYear}_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`offsale_year_user_${selectedYear}_${ownerId}`).setLabel('year_user').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`offsale_123_method_${selectedYear}_${ownerId}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`offsale_321_method_${selectedYear}_${ownerId}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`offsale_2_number_method_${selectedYear}_${ownerId}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`offsale_4_number_method_${selectedYear}_${ownerId}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
+      );
+
+      return await interaction.editReply({ 
+        content: `[OFF-SALE] Selected Year: **${selectedYear}**\nNow select a username pattern:`, 
+        components: [row1, row2] 
+      });
+    }
+
+    // --- /offsale-gen Process ---
+    if (interaction.isButton() && interaction.customId.startsWith('offsale_')) {
+      const parts = interaction.customId.split('_');
+      let filterType = '';
+      let targetYear = '';
+
+      if (parts[1] === 'cross' && parts[2] === 'user') {
+        filterType = 'cross_user';
+        targetYear = parts[3];
+      } else if (parts[1] === 'double' && parts[2] === 'user') {
+        filterType = 'double_user';
+        targetYear = parts[3];
+      } else if (parts[1] === 'year' && parts[2] === 'user') {
+        filterType = 'year_user';
+        targetYear = parts[3];
+      } else if (parts[2] === 'method') {
+        filterType = `${parts[1]}_method`;
+        targetYear = parts[3];
+      } else if (parts[3] === 'method') {
+        filterType = `${parts[1]}_${parts[2]}_method`;
+        targetYear = parts[4];
+      }
+
+      const key = `offsale_${targetYear}_${filterType}`;
+      const db = getDB();
+      const stock = db[key] || [];
+
+      if (stock.length === 0) {
+        return await interaction.editReply({ content: `❌ Out of stock for Off-Sale **${targetYear} - ${filterType}**.`, components: [] });
+      }
+
+      const accountData = stock.shift();
+      db[key] = stock;
+      saveDB();
+
+      const embed = new EmbedBuilder()
+        .setTitle('👑 OFFSALE PREMIUM ACCOUNT GENERATED')
+        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+        .setColor('#FFD700')
+        .setThumbnail(accountData.avatarUrl)
+        .addFields(
+          { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+          { name: '🎒 Inventory Items', value: `\`${accountData.itemCount || '2+'}\` items`, inline: true }
+        )
+        .setTimestamp();
+
+      try {
+        await interaction.user.send({ embeds: [embed] });
+        await interaction.editReply({ content: '✅ Off-sale account successfully sent to your DMs!', components: [] });
+      } catch (e) {
+        db[key].unshift(accountData);
+        saveDB();
+        return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
+      }
+    }
