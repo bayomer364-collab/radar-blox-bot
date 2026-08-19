@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Turbo & Hızlı Üretim Modu) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Dengeli & Eşit Üretim Modu) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -14,6 +14,18 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 const addedAccountIds = new Set();
 const scannedIds = new Set();
+
+// Eşit üretim için Hedef Metot Listesi
+const TARGET_METHODS = [
+  '123_method',
+  '321_method',
+  '2_number_method',
+  '4_number_method',
+  'cross_user',
+  'double_user',
+  'year_user'
+];
+let methodIndex = 0;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -55,7 +67,7 @@ function validateUsernameByFilter(username) {
   // 5. 321 Method (321, 4321, 321321 vb. başta veya sonda)
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
 
-  // 6. Sayı Adedi Bazlı Filtreler (Stok dengesizliğini önlemek için daha net sınırlandırıldı)
+  // 6. Sayı Adedi Bazlı Filtreler
   const digits = lowerName.match(/\d/g);
   if (digits) {
     if (digits.length === 2 && !/(123|321)/.test(lowerName)) return '2_number_method';
@@ -81,6 +93,9 @@ async function sendWebhook(payload) {
 async function main() {
   while (true) {
     try {
+      // Sıradaki hedef metotu belirle (Round-Robin Eşit Dağılım)
+      const currentDesiredMethod = TARGET_METHODS[methodIndex];
+
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
       const randomOffset = Math.floor(Math.random() * 2000000); 
       const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
@@ -102,7 +117,12 @@ async function main() {
 
       const username = res.data.name;
       const matchedFilter = validateUsernameByFilter(username);
-      if (!matchedFilter) continue;
+      
+      // Sadece o anki hedef metoda uyan hesapları kabul et, böylece eşitlik sağlanır
+      if (!matchedFilter || matchedFilter !== currentDesiredMethod) continue;
+
+      // Başarılı bir hesap bulunduğunda sıradaki metoda geç
+      methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
 
       const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
       let itemCount = 0;
@@ -135,9 +155,7 @@ async function main() {
         }
       }));
       
-      if (isOffSaleAccount || itemCount > 0) {
-        console.log(`[TURBO BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'EŞYALI'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
-      }
+      console.log(`[DENGELİ BAŞARILI] Hedeflenen: ${currentDesiredMethod} | Hesap: ${username} | Eşya: ${itemCount}`);
       
       await sleep(60);
 
