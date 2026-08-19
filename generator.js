@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Off-Sale & Eşyalı Filtreli Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Turbo & Hızlı Üretim Modu) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -69,12 +69,11 @@ async function main() {
 
       const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
       if (res.status === 429) {
-        await sleep(30000);
+        await sleep(15000); // Rate limit durumunda bekleme süresini optimize ettik
         continue;
       }
       if (!res.data || !res.data.name) {
-        await sleep(100);
-        continue;
+        continue; // Boş hesaplarda fazladan beklemeyi (sleep) kaldırarak hızı artırdık
       }
 
       const accountIdStr = res.data.id.toString();
@@ -115,16 +114,16 @@ async function main() {
         }
       }));
       
-      // SADECE EŞYALI VEYA OFF-SALE HESAPLAR KONSOLA YAZDIRILACAK (NORMALLER GİZLENDİ)
       if (isOffSaleAccount || itemCount > 0) {
-        console.log(`[BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'EŞYALI'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
+        console.log(`[TURBO BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'EŞYALI'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
       }
       
-      await sleep(400);
+      // HIZLANDIRMA: İstekler arası bekleme süresini 400ms'den 60ms'ye düşürdük
+      await sleep(60);
 
     } catch (err) {
       console.error('[HATA]:', err);
-      await sleep(5000);
+      await sleep(2000);
     }
   }
 }
