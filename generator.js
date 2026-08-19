@@ -1,8 +1,8 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Tam Eşit Dağılımlı & Kurallı Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Güncel Domain & Kesin Kurallı Mod) Başlatıldı!');
 
-const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
+const WEBHOOK_URL = 'https://radar-blox-bot-production-d990.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
 const YEAR_ID_RANGES = {
@@ -15,7 +15,6 @@ const YEARS = Object.keys(YEAR_ID_RANGES);
 const addedAccountIds = new Set();
 const scannedIds = new Set();
 
-// TÜM METOTLAR - Eşit şansla taranması için liste
 const TARGET_METHODS = [
   'year_user',
   'cross_user',
@@ -42,24 +41,19 @@ function fetchJSON(url) {
   });
 }
 
-// Verdiğin örneklere birebir uyarlanmış doğrulama fonksiyonu
 function validateUsernameByFilter(username, targetMethod) {
   const lowerName = username.toLowerCase();
 
   switch (targetMethod) {
     case 'year_user':
-      // Örnek: isim20007, isim200131, isim19981998 (1998-2026 arası yıl barındırmalı)
-      if (/(199\d|20[0-2]\d)\d*/.test(lowerName)) {
-        const match = lowerName.match(/(199\d|20[0-2]\d)/);
-        if (match) {
-          const yearVal = parseInt(match[1], 10);
-          if (yearVal >= 1998 && yearVal <= 2026) return 'year_user';
-        }
+      const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
+      if (yearMatch) {
+        const yearVal = parseInt(yearMatch[1], 10);
+        if (yearVal >= 1998 && yearVal <= 2026) return 'year_user';
       }
       return null;
 
     case 'cross_user':
-      // Örnek: 123isim123isim, 123isim123, isim123isim, isim123isim123
       if (/^(\d{2,4})([a-z]+)\1(\2)?$/.test(lowerName) || 
           /^([a-z]+)(\d{2,4})\1(\2)?$/.test(lowerName) ||
           /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
@@ -69,38 +63,33 @@ function validateUsernameByFilter(username, targetMethod) {
       return null;
 
     case 'double_user':
-      // Örnek: İsim90909090, isim909090, isim9090 (Çifte tekrarlı sayılar)
-      if (/([a-zA-Z]+)(\d{2,4})\2{1,3}$/.test(lowerName)) {
+      if (/^[a-z]+(\d{2,4})\1{1,3}$/.test(lowerName)) {
         return 'double_user';
       }
       return null;
 
     case '2_number_user':
-      // Örnek: Sonunda rastgele 2 sayı olan isimler
-      if (/[a-zA-Z]+\d{2}$/.test(lowerName)) {
+      if (/^[a-z]+\d{2}$/.test(lowerName)) {
         return '2_number_user';
       }
       return null;
 
     case '4_number_user':
-      // Örnek: Sonunda rastgele 4 sayı olan isimler
-      if (/[a-zA-Z]+\d{4}$/.test(lowerName)) {
+      if (/^[a-z]+\d{4}$/.test(lowerName)) {
         return '4_number_user';
       }
       return null;
 
     case '123_method':
-      // Örnek: isim123123, isim123, isim1234, isim12341234
-      if (/[a-zA-Z]+(123|1234|123123|12341234)+$/.test(lowerName) || 
-          /^(123|1234|123123)[a-zA-Z]+$/.test(lowerName)) {
+      if (/^[a-z]+(123|1234|123123|12341234)+$/.test(lowerName) || 
+          /^(123|1234|123123)[a-z]+$/.test(lowerName)) {
         return '123_method';
       }
       return null;
 
     case '321_method':
-      // Örnek: isim321, isim321321
-      if (/[a-zA-Z]+(321|321321)+$/.test(lowerName) || 
-          /^(321|321321)[a-zA-Z]+$/.test(lowerName)) {
+      if (/^[a-z]+(321|321321)+$/.test(lowerName) || 
+          /^(321|321321)[a-z]+$/.test(lowerName)) {
         return '321_method';
       }
       return null;
@@ -126,7 +115,6 @@ async function sendWebhook(payload) {
 async function main() {
   while (true) {
     try {
-      // Round-Robin mantığıyla sıradaki hedef metotu al
       const currentMethod = TARGET_METHODS[methodIndex];
 
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
@@ -150,13 +138,10 @@ async function main() {
 
       const username = res.data.name;
       
-      // Sadece o an hedeflenen metoda uyan hesaplar kabul edilecek (Eşit Dağılım Garantisi)
       const matchedFilter = validateUsernameByFilter(username, currentMethod);
       if (!matchedFilter) continue;
 
-      // Başarılı bulunduğunda listedeki bir sonraki metoda geç
       methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
-
       addedAccountIds.add(accountIdStr);
 
       let itemCount = 0;
@@ -187,7 +172,7 @@ async function main() {
         }
       }));
       
-      console.log(`[EŞİT GEN BAŞARILI] Hedeflenen Metot: ${matchedFilter} | Hesap: ${username}`);
+      console.log(`[KESİN BAŞARILI] Metot: ${matchedFilter} | Hesap: ${username}`);
       
       await sleep(15);
 
