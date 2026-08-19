@@ -7,6 +7,9 @@ const {
   ButtonStyle, 
   EmbedBuilder,
   SlashCommandBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   REST,
   Routes
 } = require('discord.js');
@@ -30,6 +33,7 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const ROLE_ID = '1538940771967700992';
+const ALLOWED_USER_ID = '1417227496251981895'; // Sadece bu ID /guide komutunu ve paneli kullanabilir
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 const userGenCount = new Map();
@@ -100,11 +104,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook server listening on port ${PORT}`);
 });
 
-// 2. DISCORD BOT COMMANDS
+// 2. DISCORD BOT COMMANDS (/guide eklendi)
 const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
   new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
-  new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.')
+  new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
+  new SlashCommandBuilder().setName('guide').setDescription('Creates the guide message sending panel.')
 ];
 
 client.once('ready', async () => {
@@ -121,6 +126,28 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
+      // /guide komutu için cooldown ve genel işlem mesajını atlıyoruz (çünkü özel yetkili ve paneli açacak)
+      if (interaction.commandName === 'guide') {
+        if (interaction.user.id !== ALLOWED_USER_ID) {
+          return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
+        }
+
+        const row = new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`send_guide_btn_${interaction.user.id}`)
+              .setLabel('Send Guide Message')
+              .setStyle(ButtonStyle.Primary)
+              .setEmoji('📩')
+          );
+
+        return await interaction.reply({
+          content: 'Click the button below to create and send your guide message:',
+          components: [row],
+          ephemeral: true
+        });
+      }
+
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
       const cooldownMap = isBulk ? cooldownsBulk : cooldownsGen;
@@ -142,20 +169,65 @@ client.on('interactionCreate', async (interaction) => {
       if (!interaction.deferred && !interaction.replied) {
         await interaction.reply({ content: '⏳ Processing your request...', ephemeral: false }).catch(() => {});
       }
-    } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
+    } else if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
       const customIdParts = interaction.customId.split('_');
       const ownerId = customIdParts[customIdParts.length - 1];
 
-      if (ownerId && ownerId !== interaction.user.id) {
+      // Guide butonları/formları veya genel butonlar için sahiplik kontrolü
+      if (interaction.customId.startsWith('send_guide_btn_') || interaction.customId === 'guide_modal') {
+        if (interaction.user.id !== ALLOWED_USER_ID) {
+          return await interaction.reply({ content: '❌ You do not have permission to use this!', ephemeral: true });
+        }
+      } else if (ownerId && ownerId !== interaction.user.id) {
         return await interaction.reply({ 
           content: '❌ You cannot use this menu or buttons as you did not run the command!', 
           ephemeral: true 
         });
       }
 
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferUpdate().catch(() => {});
+      if ((interaction.isButton() || interaction.isStringSelectMenu()) && !interaction.customId.startsWith('send_guide_btn_')) {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferUpdate().catch(() => {});
+        }
       }
+    }
+
+    // --- /guide Button Click (Open Modal) ---
+    if (interaction.isButton() && interaction.customId.startsWith('send_guide_btn_')) {
+      const modal = new ModalBuilder()
+        .setCustomId('guide_modal')
+        .setTitle('Create Guide Message');
+
+      const messageInput = new TextInputBuilder()
+        .setCustomId('guide_text')
+        .setLabel('What is your guide message?')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Type your guide message here...')
+        .setRequired(true);
+
+      const firstActionRow = new ActionRowBuilder().addComponents(messageInput);
+      modal.addComponents(firstActionRow);
+
+      return await interaction.showModal(modal);
+    }
+
+    // --- /guide Modal Submit (Send Message to Target Channel) ---
+    if (interaction.isModalSubmit() && interaction.customId === 'guide_modal') {
+      const enteredText = interaction.fields.getTextInputValue('guide_text');
+
+      // Mesajın gönderilmesini istediğin kanalın ID'sini buraya yazmalısın:
+      const targetChannelId = 'HEDEF_KANAL_ID_BURAYA';
+      const channel = interaction.guild.channels.cache.get(targetChannelId);
+
+      if (!channel) {
+        return await interaction.reply({ content: '❌ Error: Target channel not found!', ephemeral: true });
+      }
+
+      await channel.send({
+        content: `📢 **New Guide / Announcement:**\n\n${enteredText}`
+      });
+
+      return await interaction.reply({ content: '✅ Your guide message has been successfully sent to the channel!', ephemeral: true });
     }
 
     // --- /stock COMMAND (Karakter sınırına takılmayacak şekilde bölündü) ---
@@ -164,7 +236,6 @@ client.on('interactionCreate', async (interaction) => {
       const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
       const filterTypes = ['cross_user', 'double_user', 'year_user', '123_method', '321_method', '2_number_method', '4_number_method'];
 
-      // Yılları iki gruba bölüyoruz (2006-2011 ve 2012-2016) böylece 1024 karakter sınırı aşılmıyor.
       const yearsPart1 = years.slice(0, 6);   // 2006 - 2011
       const yearsPart2 = years.slice(6);      // 2012 - 2016
 
@@ -195,7 +266,7 @@ client.on('interactionCreate', async (interaction) => {
         .addFields(
           { name: '🔹 Gen Pool (2006-2011)', value: genText1.slice(0, 1024), inline: true },
           { name: '🔸 Bulk-Gen Pool (2006-2011)', value: bulkText1.slice(0, 1024), inline: true },
-          { name: '\u200B', value: '\u200B', inline: false }, // Boşluk bırakarak alt alta şık durmasını sağlar
+          { name: '\u200B', value: '\u200B', inline: false },
           { name: '🔹 Gen Pool (2012-2016)', value: genText2.slice(0, 1024), inline: true },
           { name: '🔸 Bulk-Gen Pool (2012-2016)', value: bulkText2.slice(0, 1024), inline: true }
         )
