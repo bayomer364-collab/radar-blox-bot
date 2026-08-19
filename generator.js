@@ -1,5 +1,7 @@
 async function runGeneratorLoop() {
-  console.log('[DEBUG] Embedded Generator (Turbo & Hızlı Üretim Modu) Başlatıldı!');
+  console.log('[DEBUG] Embedded Generator (Turbo & Yüksek Hız Modu) Başlatıldı!');
+  let pendingSaves = 0;
+
   while (true) {
     try {
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
@@ -23,7 +25,7 @@ async function runGeneratorLoop() {
 
       const username = res.data.name;
       const matchedFilter = validateUsernameByFilter(username);
-      if (!matchedFilter) continue; // Kullanıcı adı filtrelere uymuyorsa atla
+      if (!matchedFilter) continue; 
 
       // Envanter kontrolü (Sadece Off-Sale / Eşyalı seçimi için)
       const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
@@ -56,7 +58,7 @@ async function runGeneratorLoop() {
 
       let added = false;
 
-      // 1. Normal Gen ve Bulk havuzuna ekle (Envanterinde eşya olmasa bile kullanıcı adı uygunsa eklenir!)
+      // 1. Normal Gen ve Bulk havuzuna ekle
       const genKey = `gen_${accountYear}_${matchedFilter}`;
       const bulkKey = `bulk_${accountYear}_${matchedFilter}`;
 
@@ -72,7 +74,7 @@ async function runGeneratorLoop() {
         added = true;
       }
 
-      // 2. Eğer en az 2 limited eşyası varsa Off-sale havuzuna da ekle
+      // 2. Off-sale havuzu kontrolü
       if (isOffSaleAccount) {
         const offsaleKey = `offsale_${accountYear}_${matchedFilter}`;
         if (!db[offsaleKey]) db[offsaleKey] = [];
@@ -82,10 +84,18 @@ async function runGeneratorLoop() {
         }
       }
 
-      if (added) saveDB();
+      if (added) {
+        pendingSaves++;
+        // Her 5 yeni hesapta bir veya süre aşımında diske güvenli yazma yapar (SIGTERM koruması)
+        if (pendingSaves >= 5) {
+          saveDB();
+          pendingSaves = 0;
+        }
+      }
 
       console.log(`[TURBO BAŞARILI] Hesap Eklendi: ${username} | Yıl: ${accountYear} | Tip: ${matchedFilter} | Eşya: ${itemCount}`);
       
+      // Eski yüksek hıza geri dönüldü
       await sleep(60);
 
     } catch (err) {
