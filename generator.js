@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Saf Rastgele & Ultra Hızlı Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Saf & Eşit Dağılımlı Ultra Hızlı Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -33,36 +33,41 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
   
-  // 1. Cross Method (Örn: 123isim123, isim123isim, 123isim123isim)
-  const crossMatch = lowerName.match(/^(\d{2,4})([a-z]+)\1$/) || 
-                     lowerName.match(/^([a-z]+)(\d{2,4})\1$/) || 
-                     lowerName.match(/^(\d{2,4})([a-z]+)\1([a-z]+)$/) ||
-                     lowerName.match(/^(\d{2,4})([a-z]+)\1\2$/);
-  if (crossMatch) return 'cross_user';
-
-  // 2. Double Method (Örn: acc123123, 123123acc, acc19981998)
-  if (/([a-zA-Z]+)(\d{2,4})\2$/.test(lowerName) || /^(\d{2,4})\1([a-zA-Z]+)$/.test(lowerName)) return 'double_user';
-
-  // 3. Year Method (1999 - 2026 arası esnek varyasyonlar)
-  if (/\b(199\d|20[0-2]\d)\b/.test(lowerName) || /([a-zA-Z]+)(199\d|20[0-2]\d)(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) {
-    const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
-    if (yearMatch) {
-      const yearVal = parseInt(yearMatch[1], 10);
-      if (yearVal >= 1999 && yearVal <= 2026) return 'year_user';
-    }
+  // 1. Cross Method (123isim123, isim123isim, 123isim123isim vb.)
+  if (/^(\d{2,4})([a-z]+)\1$/.test(lowerName) || 
+      /^([a-z]+)(\d{2,4})\1$/.test(lowerName) || 
+      /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
+      /^([a-z]+)(\d{2,4})([a-z]+)\2$/.test(lowerName)) {
+    return 'cross_user';
   }
 
-  // 4. 123 Method
-  if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
+  // 2. Double Method (acc123123, 123123acc, acc19981998 vb.)
+  if (/([a-zA-Z]+)(\d{2,4})\2$/.test(lowerName) || /^(\d{2,4})\1([a-zA-Z]+)$/.test(lowerName)) {
+    return 'double_user';
+  }
 
-  // 5. 321 Method
-  if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
+  // 3. Year Method (1999 - 2026 arası esnek yıllar: acc200131, chicka2006 vb.)
+  const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
+  if (yearMatch) {
+    const yearVal = parseInt(yearMatch[1], 10);
+    if (yearVal >= 1999 && yearVal <= 2026) return 'year_user';
+  }
 
-  // 6. Sayı Adedi Bazlı Filtreler
+  // 4. 123 Method (123, 1234, 123123 vb. başta veya sonda)
+  if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) {
+    return '123_method';
+  }
+
+  // 5. 321 Method (321, 4321, 321321 vb. başta veya sonda)
+  if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) {
+    return '321_method';
+  }
+
+  // 6. Sayı Adedi Bazlı Filtreler (2 Number ve 4 Number)
   const digits = lowerName.match(/\d/g);
   if (digits) {
-    if (digits.length === 2 && !/(123|321)/.test(lowerName)) return '2_number_method';
-    if (digits.length === 4 && !/(123|321)/.test(lowerName)) return '4_number_method';
+    if (digits.length === 2) return '2_number_method';
+    if (digits.length === 4) return '4_number_method';
   }
 
   return null;
@@ -84,7 +89,6 @@ async function sendWebhook(payload) {
 async function main() {
   while (true) {
     try {
-      // Tamamen rastgele yıl ve offset seçimi (Hiçbir sınırlama yok)
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
       const randomOffset = Math.floor(Math.random() * 2000000); 
       const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
@@ -105,18 +109,15 @@ async function main() {
       if (addedAccountIds.has(accountIdStr)) continue;
 
       const username = res.data.name;
-      
-      // İsmin hangi metoda uyduğunu direkt test et
       const matchedFilter = validateUsernameByFilter(username);
-      if (!matchedFilter) continue; // Hangi metot olursa olsun uyanı direkt yakala
+      if (!matchedFilter) continue;
 
       addedAccountIds.add(accountIdStr);
 
-      // Envanter sorgusunu arka plana atıyoruz ki boş hesaplar (0 eşya) dahil anında geçip gitsin, hızı kesmesin
+      // Envanter ve avatar işlemlerini tamamen arka plana atıyoruz ki bot hız kesmesin, boş hesaplar da anında gitsin
       let itemCount = 0;
       let isOffSaleAccount = false;
 
-      // Hızlı non-blocking kontrol
       fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`).then(inventoryRes => {
         if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
           itemCount = inventoryRes.data.data.length;
@@ -127,7 +128,6 @@ async function main() {
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-      // Webhook'a gönder (Boş veya dolu fark etmez, hepsi anında gider)
       await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
@@ -143,10 +143,10 @@ async function main() {
         }
       }));
       
-      console.log(`[RASTGELE HIZLI ÜRETİM] Tip: ${matchedFilter} | Hesap: ${username} | Yıl: ${targetYear}`);
+      console.log(`[HIZLI GEN] Metot: ${matchedFilter} | Hesap: ${username}`);
       
-      // Hızı maksimuma çıkaran düşük bekleme süresi
-      await sleep(15);
+      // Hızı maksimum (10ms) seviyeye çektik
+      await sleep(10);
 
     } catch (err) {
       console.error('[HATA]:', err);
