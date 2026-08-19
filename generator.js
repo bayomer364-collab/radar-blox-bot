@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Off-Sale & Normal Dual Mode) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Filtreli Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -12,7 +12,6 @@ const YEAR_ID_RANGES = {
 };
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
-let currentIds = { ...YEAR_ID_RANGES };
 const addedAccountIds = new Set();
 const scannedIds = new Set();
 
@@ -85,8 +84,6 @@ async function main() {
       const matchedFilter = validateUsernameByFilter(username);
       if (!matchedFilter) continue;
 
-      // ENVANTER KONTROLÜ (Min 2 eşya kontrolü - Offsale için)
-      // Roblox envanter API'si üzerinden kullanıcının giysi/aksesuar (Asset) sayısını kontrol ediyoruz
       const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
       let itemCount = 0;
       let isOffSaleAccount = false;
@@ -103,8 +100,7 @@ async function main() {
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-      // Eğer hesapta 2 veya daha fazla eşya varsa offsale havuzuna, yoksa normal havuza gönderilir
-      const webhookResponseCode = await sendWebhook(JSON.stringify({
+      await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
         filterType: matchedFilter,
@@ -119,7 +115,11 @@ async function main() {
         }
       }));
       
-      console.log(`[BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'NORMAL'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
+      // Sadece değerli (eşyalı) hesap bulunduğunda konsola yazdır
+      if (isOffSaleAccount || itemCount > 0) {
+        console.log(`[BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'EŞYALI'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
+      }
+      
       await sleep(400);
 
     } catch (err) {
