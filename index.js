@@ -167,12 +167,12 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
+      // /guide komutu özel olarak işleniyor ve diğer komutların ortak önbellek/bekletme süreçlerine sokulmuyor
       if (interaction.commandName === 'guide') {
         if (interaction.user.id !== ALLOWED_USER_ID) {
           return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
         }
 
-        // /guide komutu hatasız doğrudan modal (form) açar
         const modal = new ModalBuilder()
           .setCustomId('guide_main_modal')
           .setTitle('Create Custom Guide Panel');
@@ -249,7 +249,6 @@ client.on('interactionCreate', async (interaction) => {
         .setColor('#2F3136')
         .setTimestamp();
 
-      // Yukarıdaki GUIDE_SELECT_OPTIONS dizisinden özel menüyü oluşturur
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('guide_menu_select')
         .setPlaceholder('Make a selection...')
