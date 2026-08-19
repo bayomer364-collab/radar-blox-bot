@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Dengeli & Eşit Üretim Modu) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Hızlı & Düzeltilmiş Üretim Modu) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -15,7 +15,6 @@ const YEARS = Object.keys(YEAR_ID_RANGES);
 const addedAccountIds = new Set();
 const scannedIds = new Set();
 
-// Eşit üretim için Hedef Metot Listesi
 const TARGET_METHODS = [
   '123_method',
   '321_method',
@@ -45,14 +44,17 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
   
-  // 1. Cross Method (Örn: 123acc123 veya 1234acc1234)
-  const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
-  if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
+  // 1. Düzeltilmiş Cross Method (Örn: 123isim123, isim123isim, 123isim123isim)
+  const crossMatch = lowerName.match(/^(\d{2,4})([a-z]+)\1$/) || 
+                     lowerName.match(/^([a-z]+)(\d{2,4})\1$/) || 
+                     lowerName.match(/^(\d{2,4})([a-z]+)\1([a-z]+)$/) ||
+                     lowerName.match(/^(\d{2,4})([a-z]+)\1\2$/);
+  if (crossMatch) return 'cross_user';
 
   // 2. Double Method (Örn: acc123123, 123123acc, acc19981998)
   if (/([a-zA-Z]+)(\d{2,4})\2$/.test(lowerName) || /^(\d{2,4})\1([a-zA-Z]+)$/.test(lowerName)) return 'double_user';
 
-  // 3. Year Method (1999 - 2026 arası, esnek varyasyonlar: acc200131, acc20007 vb.)
+  // 3. Year Method (1999 - 2026 arası esnek varyasyonlar)
   if (/\b(199\d|20[0-2]\d)\b/.test(lowerName) || /([a-zA-Z]+)(199\d|20[0-2]\d)(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) {
     const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
     if (yearMatch) {
@@ -93,7 +95,6 @@ async function sendWebhook(payload) {
 async function main() {
   while (true) {
     try {
-      // Sıradaki hedef metotu belirle (Round-Robin Eşit Dağılım)
       const currentDesiredMethod = TARGET_METHODS[methodIndex];
 
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
@@ -118,12 +119,11 @@ async function main() {
       const username = res.data.name;
       const matchedFilter = validateUsernameByFilter(username);
       
-      // Sadece o anki hedef metoda uyan hesapları kabul et, böylece eşitlik sağlanır
       if (!matchedFilter || matchedFilter !== currentDesiredMethod) continue;
 
-      // Başarılı bir hesap bulunduğunda sıradaki metoda geç
       methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
 
+      // HIZLANDIRMA: Boş hesapların da (itemCount: 0) sisteme hızlıca dahil edilmesi için envanter kontrolü yavaşlatmasın diye optimize edildi
       const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
       let itemCount = 0;
       let isOffSaleAccount = false;
@@ -155,9 +155,10 @@ async function main() {
         }
       }));
       
-      console.log(`[DENGELİ BAŞARILI] Hedeflenen: ${currentDesiredMethod} | Hesap: ${username} | Eşya: ${itemCount}`);
+      console.log(`[HIZLI ÜRETİM] Tip: ${matchedFilter} | Hesap: ${username} | Eşya: ${itemCount}`);
       
-      await sleep(60);
+      // Hızın düşmemesi için bekleme süresi minimumda tutuldu
+      await sleep(30);
 
     } catch (err) {
       console.error('[HATA]:', err);
