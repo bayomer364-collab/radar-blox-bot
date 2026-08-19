@@ -1,8 +1,7 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Gelişmiş Benzersiz Tarama Modu) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Off-Sale & Normal Dual Mode) Başlatıldı!');
 
-// DİKKAT: Buradaki domain adresini kendi Railway domain adresinle değiştirdiğinden emin ol!
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 
@@ -14,10 +13,7 @@ const YEAR_ID_RANGES = {
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
 let currentIds = { ...YEAR_ID_RANGES };
-
-// Stoğa eklenenlerin ID'leri
 const addedAccountIds = new Set();
-// Daha önce taranmış (boş, silinmiş veya eşleşmemiş) tüm ID'leri saklayan Set (Aynı yerin tekrar taranmasını engeller)
 const scannedIds = new Set();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -35,35 +31,17 @@ function fetchJSON(url) {
   });
 }
 
-// Filtre doğrulama mekanizması
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
-
-  // 1. cross_user kontrolü
   const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
   if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
-  
-  // 2. year_user kontrolü
-  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) {
-    return 'year_user';
-  }
-  
-  // 3. double_user kontrolü
+  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) return 'year_user';
   if (/(\d{2})\1/.test(lowerName)) return 'double_user';
-
-  // 4. 123_method kontrolü
   if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
-
-  // 5. 321_method kontrolü
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
-
-  // 6. 2_number_method kontrolü
   const digits = lowerName.match(/\d/g);
   if (digits && digits.length === 2) return '2_number_method';
-
-  // 7. 4_number_method kontrolü
   if (digits && digits.length === 4) return '4_number_method';
-  
   return null;
 }
 
@@ -84,77 +62,68 @@ async function main() {
   while (true) {
     try {
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
-      
-      // Sabit artış yerine çok daha geniş ve rastgele bir havuz aralığı oluşturuyoruz
       const randomOffset = Math.floor(Math.random() * 2000000); 
       const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
 
-      // Bu ID daha önce taranmışsa (boş olsa bile) döngüyü atla, sıfırdan başka ID seç
-      if (scannedIds.has(testId)) {
-        continue;
-      }
-
-      // Tarananlar listesine ekle ki bir daha asla bu ID'ye bakılmasın
+      if (scannedIds.has(testId)) continue;
       scannedIds.add(testId);
 
-      // Bellek şişmesini önlemek için taranan ID seti 100 bini geçerse ilk yarısını temizleyebiliriz
-      if (scannedIds.size > 100000) {
-        const iterator = scannedIds.values();
-        for (let i = 0; i < 20000; i++) {
-          scannedIds.delete(iterator.next().value);
-        }
-      }
-
       const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
-      
       if (res.status === 429) {
-        console.log('[UYARI] İstek sınırı (Rate limit) aşıldı! 30 saniye mola veriliyor...');
         await sleep(30000);
         continue;
       }
-
       if (!res.data || !res.data.name) {
         await sleep(100);
         continue;
       }
 
       const accountIdStr = res.data.id.toString();
-
-      if (addedAccountIds.has(accountIdStr)) {
-        continue;
-      }
+      if (addedAccountIds.has(accountIdStr)) continue;
 
       const username = res.data.name;
       const matchedFilter = validateUsernameByFilter(username);
-      
       if (!matchedFilter) continue;
 
-      // Başarılı hesap bir daha asla seçilmesin
+      // ENVANTER KONTROLÜ (Min 2 eşya kontrolü - Offsale için)
+      // Roblox envanter API'si üzerinden kullanıcının giysi/aksesuar (Asset) sayısını kontrol ediyoruz
+      const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
+      let itemCount = 0;
+      let isOffSaleAccount = false;
+
+      if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
+        itemCount = inventoryRes.data.data.length;
+        if (itemCount >= 2) {
+          isOffSaleAccount = true;
+        }
+      }
+
       addedAccountIds.add(accountIdStr);
 
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
+      // Eğer hesapta 2 veya daha fazla eşya varsa offsale havuzuna, yoksa normal havuza gönderilir
       const webhookResponseCode = await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
         filterType: matchedFilter,
+        isOffSale: isOffSaleAccount,
         accountData: {
           id: accountIdStr,
           name: username,
           createdDate: res.data.created.split('T')[0],
           isBanned: res.data.isBanned || false,
-          lastOnline: res.data.isBanned ? 'Yasaklı' : 'Aktif',
-          inventoryInfo: 'Herkese Açık',
+          itemCount: itemCount,
           avatarUrl: avatarUrl
         }
       }));
       
-      console.log(`[BAŞARILI] Yeni Benzersiz Hesap Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter} | Webhook Yanıt Kodu: ${webhookResponseCode}`);
+      console.log(`[BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'NORMAL'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
       await sleep(400);
 
     } catch (err) {
-      console.error('[HATA] Beklenmedik bir hata oluştu:', err);
+      console.error('[HATA]:', err);
       await sleep(5000);
     }
   }
