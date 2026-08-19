@@ -33,6 +33,7 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const ROLE_ID = '1538940771967700992';
+const OFF_SALE_ROLE_ID = '1539633713133125813'; // Yeni eklenen Offsale rol ID'si
 const ALLOWED_USER_ID = '1417227496251981895'; // Only this user ID can use the /guide command and panel
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
@@ -94,12 +95,12 @@ const GUIDE_SELECT_OPTIONS_PART2 = [
   }
 ];
 
-// Combine all for easy lookup
 const ALL_GUIDE_OPTIONS = [...GUIDE_SELECT_OPTIONS_PART1, ...GUIDE_SELECT_OPTIONS_PART2];
 
 const userGenCount = new Map();
 const cooldownsGen = new Map();
 const cooldownsBulk = new Map();
+const cooldownsOffsale = new Map();
 
 let memoryDB = {};
 
@@ -134,30 +135,31 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/api/add-account', (req, res) => {
-  const { secret, targetYear, filterType, accountData } = req.body;
+  const { secret, targetYear, filterType, accountData, isOffSale } = req.body;
   if (secret !== WEBHOOK_SECRET) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
   const db = getDB();
-  const genKey = `gen_${targetYear}_${filterType}`;
+  const prefix = isOffSale ? 'offsale' : 'gen';
+  const genKey = `${prefix}_${targetYear}_${filterType}`;
   const bulkKey = `bulk_${targetYear}_${filterType}`;
 
   if (!db[genKey]) db[genKey] = [];
-  if (!db[bulkKey]) db[bulkKey] = [];
+  if (!isOffSale && !db[bulkKey]) db[bulkKey] = [];
 
   let added = false;
   if (!db[genKey].some(acc => acc.id === accountData.id)) {
     db[genKey].push(accountData);
     added = true;
   }
-  if (!db[bulkKey].some(acc => acc.id === accountData.id)) {
+  if (!isOffSale && !db[bulkKey].some(acc => acc.id === accountData.id)) {
     db[bulkKey].push(accountData);
     added = true;
   }
 
   if (added) saveDB();
-  return res.json({ success: true, genStockCount: db[genKey].length, bulkStockCount: db[bulkKey].length });
+  return res.json({ success: true, stockCount: db[genKey].length });
 });
 
 const PORT = process.env.PORT || 10000;
@@ -169,6 +171,7 @@ app.listen(PORT, '0.0.0.0', () => {
 const commands = [
   new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
   new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
+  new SlashCommandBuilder().setName('offsale-gen').setDescription('Generates a premium off-sale account with min 2 items.'),
   new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
   new SlashCommandBuilder().setName('guide').setDescription('Creates the interactive guide message panel.')
 ];
@@ -212,8 +215,9 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
-      const cooldownMap = isBulk ? cooldownsBulk : cooldownsGen;
-      const timeLimit = isBulk ? 50000 : 25000;
+      const isOffsale = interaction.commandName === 'offsale-gen';
+      const cooldownMap = isBulk ? cooldownsBulk : (isOffsale ? cooldownsOffsale : cooldownsGen);
+      const timeLimit = isBulk ? 50000 : (isOffsale ? 30000 : 25000);
 
       const lastUsed = cooldownMap.get(interaction.user.id);
       if (lastUsed && (now - lastUsed < timeLimit)) {
@@ -255,7 +259,7 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /guide Modal Submit (Send Embed + 2 Custom Select Menus for all 7 methods) ---
+    // --- /guide Modal Submit ---
     if (interaction.isModalSubmit() && interaction.customId === 'guide_main_modal') {
       const mainText = interaction.fields.getTextInputValue('guide_main_text');
       const channel = interaction.channel;
@@ -302,10 +306,10 @@ client.on('interactionCreate', async (interaction) => {
         components: [row1, row2]
       });
 
-      return await interaction.reply({ content: '✅ Custom interactive guide panel (with all 7 methods) successfully sent to this channel!', ephemeral: true });
+      return await interaction.reply({ content: '✅ Custom interactive guide panel successfully sent to this channel!', ephemeral: true });
     }
 
-    // --- Guide Select Menu Interaction (Handles both menus) ---
+    // --- Guide Select Menu Interaction ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('guide_menu_select_')) {
       const selectedValue = interaction.values[0];
       const selectedOption = ALL_GUIDE_OPTIONS.find(opt => opt.value === selectedValue);
@@ -324,18 +328,20 @@ client.on('interactionCreate', async (interaction) => {
       const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
       const filterTypes = ['cross_user', 'double_user', 'year_user', '123_method', '321_method', '2_number_method', '4_number_method'];
 
-      const yearsPart1 = years.slice(0, 6);   // 2006 - 2011
-      const yearsPart2 = years.slice(6);      // 2012 - 2016
+      const yearsPart1 = years.slice(0, 6);
+      const yearsPart2 = years.slice(6);
 
-      let genText1 = '', bulkText1 = '';
-      let genText2 = '', bulkText2 = '';
+      let genText1 = '', bulkText1 = '', offsaleText1 = '';
+      let genText2 = '', bulkText2 = '', offsaleText2 = '';
 
       for (const year of yearsPart1) {
         for (const filter of filterTypes) {
           const genCount = (db[`gen_${year}_${filter}`] || []).length;
           const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
+          const offsaleCount = (db[`offsale_${year}_${filter}`] || []).length;
           genText1 += `• **${year}** ${filter}: \`${genCount}\`\n`;
           bulkText1 += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
+          offsaleText1 += `• **${year}** ${filter}: \`${offsaleCount}\`\n`;
         }
       }
 
@@ -343,8 +349,10 @@ client.on('interactionCreate', async (interaction) => {
         for (const filter of filterTypes) {
           const genCount = (db[`gen_${year}_${filter}`] || []).length;
           const bulkCount = (db[`bulk_${year}_${filter}`] || []).length;
+          const offsaleCount = (db[`offsale_${year}_${filter}`] || []).length;
           genText2 += `• **${year}** ${filter}: \`${genCount}\`\n`;
           bulkText2 += `• **${year}** ${filter}: \`${bulkCount}\`\n`;
+          offsaleText2 += `• **${year}** ${filter}: \`${offsaleCount}\`\n`;
         }
       }
 
@@ -352,11 +360,13 @@ client.on('interactionCreate', async (interaction) => {
         .setTitle('📊 Detailed Stock Status (2006 - 2016)')
         .setColor('#2F3136')
         .addFields(
-          { name: '🔹 Gen Pool (2006-2011)', value: genText1.slice(0, 1024), inline: true },
-          { name: '🔸 Bulk-Gen Pool (2006-2011)', value: bulkText1.slice(0, 1024), inline: true },
+          { name: '🔹 Gen (2006-11)', value: genText1.slice(0, 1024), inline: true },
+          { name: '🔸 Bulk (2006-11)', value: bulkText1.slice(0, 1024), inline: true },
+          { name: '👑 Offsale (2006-11)', value: offsaleText1.slice(0, 1024), inline: true },
           { name: '\u200B', value: '\u200B', inline: false },
-          { name: '🔹 Gen Pool (2012-2016)', value: genText2.slice(0, 1024), inline: true },
-          { name: '🔸 Bulk-Gen Pool (2012-2016)', value: bulkText2.slice(0, 1024), inline: true }
+          { name: '🔹 Gen (2012-16)', value: genText2.slice(0, 1024), inline: true },
+          { name: '🔸 Bulk (2012-16)', value: bulkText2.slice(0, 1024), inline: true },
+          { name: '👑 Offsale (2012-16)', value: offsaleText2.slice(0, 1024), inline: true }
         )
         .setTimestamp();
 
@@ -393,6 +403,26 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.editReply({ content: 'Select the amount to generate:', components: [row] });
     }
 
+    // --- /offsale-gen COMMAND ---
+    if (interaction.isChatInputCommand() && interaction.commandName === 'offsale-gen') {
+      if (!interaction.member.roles.cache.has(OFF_SALE_ROLE_ID)) {
+        return await interaction.editReply({ content: '❌ You do not have the required role to use this command!' });
+      }
+
+      const yearSelect = new StringSelectMenuBuilder()
+        .setCustomId(`select_offsale_year_${interaction.user.id}`)
+        .setPlaceholder('Select Off-Sale Year (2006 - 2016)')
+        .addOptions(Array.from({ length: 11 }, (_, i) => {
+          const year = (2006 + i).toString();
+          return { label: year, value: year, description: `Off-sale accounts created in ${year}` };
+        }));
+
+      return await interaction.editReply({
+        content: 'Please select the account creation year for Off-Sale Gen:',
+        components: [new ActionRowBuilder().addComponents(yearSelect)]
+      });
+    }
+
     // --- /bulk-gen Amount Selection ---
     if (interaction.isButton() && interaction.customId.startsWith('bulk_amt_')) {
       const parts = interaction.customId.split('_');
@@ -412,7 +442,7 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /bulk-gen Year Selection (Includes all 7 methods in buttons) ---
+    // --- /bulk-gen Year Selection ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('bulk_year_')) {
       const parts = interaction.customId.split('_');
       const amount = parts[2];
@@ -431,6 +461,29 @@ client.on('interactionCreate', async (interaction) => {
       );
 
       return await interaction.editReply({ content: `Selected Year: **${selectedYear}** | Amount: **${amount}**\nPlease select username pattern:`, components: [row1, row2] });
+    }
+
+    // --- /offsale-gen Year Selection ---
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_offsale_year_')) {
+      const selectedYear = interaction.values[0];
+      const ownerId = interaction.customId.split('_')[3];
+
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`offsale_cross_user_${selectedYear}_${ownerId}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`offsale_double_user_${selectedYear}_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`offsale_year_user_${selectedYear}_${ownerId}`).setLabel('year_user').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`offsale_123_method_${selectedYear}_${ownerId}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`offsale_321_method_${selectedYear}_${ownerId}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`offsale_2_number_method_${selectedYear}_${ownerId}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`offsale_4_number_method_${selectedYear}_${ownerId}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
+      );
+
+      return await interaction.editReply({ 
+        content: `[OFF-SALE] Selected Year: **${selectedYear}**\nNow select a username pattern:`, 
+        components: [row1, row2] 
+      });
     }
 
     // --- /bulk-gen Account Generation Process ---
@@ -508,7 +561,64 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /gen Year Selection (Includes all 7 methods in buttons) ---
+    // --- /offsale-gen Account Generation Process ---
+    if (interaction.isButton() && interaction.customId.startsWith('offsale_')) {
+      const parts = interaction.customId.split('_');
+      let filterType = '';
+      let targetYear = '';
+
+      if (parts[1] === 'cross' && parts[2] === 'user') {
+        filterType = 'cross_user';
+        targetYear = parts[3];
+      } else if (parts[1] === 'double' && parts[2] === 'user') {
+        filterType = 'double_user';
+        targetYear = parts[3];
+      } else if (parts[1] === 'year' && parts[2] === 'user') {
+        filterType = 'year_user';
+        targetYear = parts[3];
+      } else if (parts[2] === 'method') {
+        filterType = `${parts[1]}_method`;
+        targetYear = parts[3];
+      } else if (parts[3] === 'method') {
+        filterType = `${parts[1]}_${parts[2]}_method`;
+        targetYear = parts[4];
+      }
+
+      const key = `offsale_${targetYear}_${filterType}`;
+      const db = getDB();
+      const stock = db[key] || [];
+
+      if (stock.length === 0) {
+        return await interaction.editReply({ content: `❌ Out of stock for Off-Sale **${targetYear} - ${filterType}**.`, components: [] });
+      }
+
+      const accountData = stock.shift();
+      db[key] = stock;
+      saveDB();
+
+      const embed = new EmbedBuilder()
+        .setTitle('👑 OFFSALE PREMIUM ACCOUNT GENERATED')
+        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
+        .setColor('#FFD700')
+        .setThumbnail(accountData.avatarUrl)
+        .addFields(
+          { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
+          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
+          { name: '🎒 Inventory Items', value: `\`${accountData.itemCount || '2+'}\` items`, inline: true }
+        )
+        .setTimestamp();
+
+      try {
+        await interaction.user.send({ embeds: [embed] });
+        await interaction.editReply({ content: '✅ Off-sale account successfully sent to your DMs!', components: [] });
+      } catch (e) {
+        db[key].unshift(accountData);
+        saveDB();
+        return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
+      }
+    }
+
+    // --- /gen Year Selection ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
       const selectedYear = interaction.values[0];
       const ownerId = interaction.customId.split('_')[2];
@@ -619,146 +729,3 @@ if (!TOKEN) {
       console.error("DISCORD CONNECTION ERROR DETAIL:", err);
     });
 }
-// ... (Önceki kodların aynen kalıyor, komut listesine /offsale-gen ekliyoruz)
-
-const OFF_SALE_ROLE_ID = '1539633713133125813';
-
-// 2. DISCORD BOT COMMANDS kısmını bununla değiştir:
-const commands = [
-  new SlashCommandBuilder().setName('gen').setDescription('Generates a single premium account.'),
-  new SlashCommandBuilder().setName('bulk-gen').setDescription('Generates multiple bulk premium accounts.'),
-  new SlashCommandBuilder().setName('offsale-gen').setDescription('Generates a premium off-sale account with min 2 items.'),
-  new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
-  new SlashCommandBuilder().setName('guide').setDescription('Creates the interactive guide message panel.')
-];
-
-// Webhook kısmına offsale desteği ekleyelim (app.post('/api/add-account', ...))
-app.post('/api/add-account', (req, res) => {
-  const { secret, targetYear, filterType, accountData, isOffSale } = req.body;
-  if (secret !== WEBHOOK_SECRET) {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
-
-  const db = getDB();
-  const prefix = isOffSale ? 'offsale' : 'gen';
-  const genKey = `${prefix}_${targetYear}_${filterType}`;
-  const bulkKey = `bulk_${targetYear}_${filterType}`; // Bulk yine ortak kalabilir veya isteğe göre ayrılabilir
-
-  if (!db[genKey]) db[genKey] = [];
-  if (!isOffSale && !db[bulkKey]) db[bulkKey] = [];
-
-  let added = false;
-  if (!db[genKey].some(acc => acc.id === accountData.id)) {
-    db[genKey].push(accountData);
-    added = true;
-  }
-  if (!isOffSale && !db[bulkKey].some(acc => acc.id === accountData.id)) {
-    db[bulkKey].push(accountData);
-    added = true;
-  }
-
-  if (added) saveDB();
-  return res.json({ success: true, stockCount: db[genKey].length });
-});
-
-// InteractionCreate içerisine eklenecek komut blokları:
-
-    // --- /offsale-gen COMMAND ---
-    if (interaction.isChatInputCommand() && interaction.commandName === 'offsale-gen') {
-      if (!interaction.member.roles.cache.has(OFF_SALE_ROLE_ID)) {
-        return await interaction.editReply({ content: '❌ You do not have the required role to use this command!' });
-      }
-
-      const yearSelect = new StringSelectMenuBuilder()
-        .setCustomId(`select_offsale_year_${interaction.user.id}`)
-        .setPlaceholder('Select Off-Sale Year (2006 - 2016)')
-        .addOptions(Array.from({ length: 11 }, (_, i) => {
-          const year = (2006 + i).toString();
-          return { label: year, value: year, description: `Off-sale accounts created in ${year}` };
-        }));
-
-      return await interaction.editReply({
-        content: 'Please select the account creation year for Off-Sale Gen:',
-        components: [new ActionRowBuilder().addComponents(yearSelect)]
-      });
-    }
-
-    // --- /offsale-gen Year Selection ---
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_offsale_year_')) {
-      const selectedYear = interaction.values[0];
-      const ownerId = interaction.customId.split('_')[3];
-
-      const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`offsale_cross_user_${selectedYear}_${ownerId}`).setLabel('cross_user').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`offsale_double_user_${selectedYear}_${ownerId}`).setLabel('double_user').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`offsale_year_user_${selectedYear}_${ownerId}`).setLabel('year_user').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`offsale_123_method_${selectedYear}_${ownerId}`).setLabel('123_method').setStyle(ButtonStyle.Danger)
-      );
-      const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`offsale_321_method_${selectedYear}_${ownerId}`).setLabel('321_method').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`offsale_2_number_method_${selectedYear}_${ownerId}`).setLabel('2_number_method').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`offsale_4_number_method_${selectedYear}_${ownerId}`).setLabel('4_number_method').setStyle(ButtonStyle.Secondary)
-      );
-
-      return await interaction.editReply({ 
-        content: `[OFF-SALE] Selected Year: **${selectedYear}**\nNow select a username pattern:`, 
-        components: [row1, row2] 
-      });
-    }
-
-    // --- /offsale-gen Process ---
-    if (interaction.isButton() && interaction.customId.startsWith('offsale_')) {
-      const parts = interaction.customId.split('_');
-      let filterType = '';
-      let targetYear = '';
-
-      if (parts[1] === 'cross' && parts[2] === 'user') {
-        filterType = 'cross_user';
-        targetYear = parts[3];
-      } else if (parts[1] === 'double' && parts[2] === 'user') {
-        filterType = 'double_user';
-        targetYear = parts[3];
-      } else if (parts[1] === 'year' && parts[2] === 'user') {
-        filterType = 'year_user';
-        targetYear = parts[3];
-      } else if (parts[2] === 'method') {
-        filterType = `${parts[1]}_method`;
-        targetYear = parts[3];
-      } else if (parts[3] === 'method') {
-        filterType = `${parts[1]}_${parts[2]}_method`;
-        targetYear = parts[4];
-      }
-
-      const key = `offsale_${targetYear}_${filterType}`;
-      const db = getDB();
-      const stock = db[key] || [];
-
-      if (stock.length === 0) {
-        return await interaction.editReply({ content: `❌ Out of stock for Off-Sale **${targetYear} - ${filterType}**.`, components: [] });
-      }
-
-      const accountData = stock.shift();
-      db[key] = stock;
-      saveDB();
-
-      const embed = new EmbedBuilder()
-        .setTitle('👑 OFFSALE PREMIUM ACCOUNT GENERATED')
-        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
-        .setColor('#FFD700')
-        .setThumbnail(accountData.avatarUrl)
-        .addFields(
-          { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
-          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🎒 Inventory Items', value: `\`${accountData.itemCount || '2+'}\` items`, inline: true }
-        )
-        .setTimestamp();
-
-      try {
-        await interaction.user.send({ embeds: [embed] });
-        await interaction.editReply({ content: '✅ Off-sale account successfully sent to your DMs!', components: [] });
-      } catch (e) {
-        db[key].unshift(accountData);
-        saveDB();
-        return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
-      }
-    }
