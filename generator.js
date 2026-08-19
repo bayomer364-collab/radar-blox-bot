@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Dual-Stock Modu ve Tekrar Önleme) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Gelişmiş Benzersiz Tarama Modu) Başlatıldı!');
 
 // DİKKAT: Buradaki domain adresini kendi Railway domain adresinle değiştirdiğinden emin ol!
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
@@ -15,8 +15,10 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 let currentIds = { ...YEAR_ID_RANGES };
 
-// Daha önce stoğa eklenen hesapların ID'lerini saklamak için bir Set (Aynı hesabın tekrar eklenmesini engeller)
+// Stoğa eklenenlerin ID'leri
 const addedAccountIds = new Set();
+// Daha önce taranmış (boş, silinmiş veya eşleşmemiş) tüm ID'leri saklayan Set (Aynı yerin tekrar taranmasını engeller)
+const scannedIds = new Set();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -33,7 +35,7 @@ function fetchJSON(url) {
   });
 }
 
-// Filtre doğrulama mekanizması (Güncellenmiş Esnek Yapı)
+// Filtre doğrulama mekanizması
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
 
@@ -83,14 +85,24 @@ async function main() {
     try {
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
       
-      // Sürekli aynı hesapların dönmemesi için ID aralığını daha geniş bir rastgelelikle tarıyoruz
-      const randomOffset = Math.floor(Math.random() * 50000);
-      const testId = currentIds[targetYear] + randomOffset;
-      currentIds[targetYear] += 1500; 
+      // Sabit artış yerine çok daha geniş ve rastgele bir havuz aralığı oluşturuyoruz
+      const randomOffset = Math.floor(Math.random() * 2000000); 
+      const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
 
-      // Eğer bu hesap ID'si daha önce stoğa eklendiyse direkt atla
-      if (addedAccountIds.has(testId)) {
+      // Bu ID daha önce taranmışsa (boş olsa bile) döngüyü atla, sıfırdan başka ID seç
+      if (scannedIds.has(testId)) {
         continue;
+      }
+
+      // Tarananlar listesine ekle ki bir daha asla bu ID'ye bakılmasın
+      scannedIds.add(testId);
+
+      // Bellek şişmesini önlemek için taranan ID seti 100 bini geçerse ilk yarısını temizleyebiliriz
+      if (scannedIds.size > 100000) {
+        const iterator = scannedIds.values();
+        for (let i = 0; i < 20000; i++) {
+          scannedIds.delete(iterator.next().value);
+        }
       }
 
       const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
@@ -102,13 +114,12 @@ async function main() {
       }
 
       if (!res.data || !res.data.name) {
-        await sleep(150);
+        await sleep(100);
         continue;
       }
 
       const accountIdStr = res.data.id.toString();
 
-      // Kesin güvenlik: Bu kullanıcı ID'si daha önce işlendiyse döngünün başına dön
       if (addedAccountIds.has(accountIdStr)) {
         continue;
       }
@@ -118,9 +129,8 @@ async function main() {
       
       if (!matchedFilter) continue;
 
-      // Hesabı benzersizler listesine ekle ki bir daha asla seçilmesin
+      // Başarılı hesap bir daha asla seçilmesin
       addedAccountIds.add(accountIdStr);
-      // Belleğin şişmesini önlemek için liste çok büyürse (örn. 50 bin kayıt) eski kayıtları temizleyebilirsiniz ama şimdilik idealdir.
 
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
@@ -140,7 +150,7 @@ async function main() {
         }
       }));
       
-      console.log(`[BAŞARILI] Yeni Hesap Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter} | Webhook Yanıt Kodu: ${webhookResponseCode}`);
+      console.log(`[BAŞARILI] Yeni Benzersiz Hesap Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter} | Webhook Yanıt Kodu: ${webhookResponseCode}`);
       await sleep(400);
 
     } catch (err) {
