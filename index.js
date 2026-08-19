@@ -174,7 +174,7 @@ const commands = [
   new SlashCommandBuilder().setName('offsale-gen').setDescription('Generates a premium off-sale account with min 2 items.'),
   new SlashCommandBuilder().setName('stock').setDescription('Shows current detailed pool stocks.'),
   new SlashCommandBuilder().setName('guide').setDescription('Creates the interactive guide message panel.')
-];
+].map(command => command.toJSON());
 
 client.once('ready', async () => {
   console.log(`${client.user.tag} is online and ready!`);
@@ -554,7 +554,6 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       try {
-        // HATA ÇÖZÜMÜ: 6000 karakter sınırını aşmamak için embed'leri tekli olarak döngüyle gönderiyoruz.
         for (const embed of embeds) {
           await interaction.user.send({ embeds: [embed] });
         }
