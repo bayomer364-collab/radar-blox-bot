@@ -1,142 +1,126 @@
 const { 
+    Client, 
+    GatewayIntentBits, 
     ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle, 
-    StringSelectMenuBuilder, 
-    EmbedBuilder 
+    REST, 
+    Routes, 
+    SlashCommandBuilder 
 } = require('discord.js');
 
-const OWNER_ID = "1417227496251981895";
+// Bot client setup
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+});
 
-// Bu fonksiyonu ana index.js dosyamızdan çağıracağız
-function setupGuideSystem(client) {
+// Authorized User ID (Sadece bu ID komutu ve paneli kullanabilir)
+const ALLOWED_USER_ID = '1417227496251981895';
 
-    // Global rehber hafızası yoksa oluşturalım
-    if (!client.guideStorage) {
-        client.guideStorage = {};
+// When the bot is ready
+client.once('ready', async () => {
+    console.log(`Bot is online: ${client.user.tag}`);
+
+    // Registering the /guide slash command
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('guide')
+            .setDescription('Creates the guide message sending panel.')
+    ];
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+    try {
+        console.log('Refreshing application (/) commands...');
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commands },
+        );
+        console.log('Successfully reloaded application (/) commands.');
+    } catch (error) {
+        console.error(error);
     }
+});
 
-    // Komut kaydedildikten sonra interaction'ları dinleme
-    client.on('interactionCreate', async interaction => {
-        
-        // 1. /guide komutu tetiklendiğinde
-        if (interaction.isChatInputCommand() && interaction.commandName === 'guide') {
-            if (interaction.user.id !== OWNER_ID) {
-                return interaction.reply({ content: 'Bu komutu kullanma yetkin yok!', ephemeral: true });
-            }
+// Interaction handler
+client.on('interactionCreate', async interaction => {
+    
+    // 1. When the /guide command is executed
+    if (interaction.isChatInputCommand() && interaction.commandName === 'guide') {
+        // Security check: Only the specified user can use this
+        if (interaction.user.id !== ALLOWED_USER_ID) {
+            return interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
+        }
 
-            const modal = new ModalBuilder()
-                .setCustomId('guideModal1')
-                .setTitle('Özel Rehber Oluşturucu (1/2)');
-
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('embedTitle').setLabel('Embed Başlığı').setStyle(TextInputStyle.Short).setValue('Available Methods').setRequired(true)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('embedDesc').setLabel('Embed Açıklaması / Ana Metin').setStyle(TextInputStyle.Paragraph).setRequired(true)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('g1Name').setLabel('1. Guide Adı').setMaxLength(100).setStyle(TextInputStyle.Short).setRequired(true)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('g1Text').setLabel('1. Guide İçeriği').setStyle(TextInputStyle.Paragraph).setRequired(true)
-                )
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('send_guide_btn')
+                    .setLabel('Send Guide Message')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('📩')
             );
 
-            return await interaction.showModal(modal);
+        await interaction.reply({
+            content: 'Click the button below to create and send your guide message:',
+            components: [row],
+            ephemeral: true
+        });
+    }
+
+    // 2. When the button is clicked to open the modal
+    if (interaction.isButton() && interaction.customId === 'send_guide_btn') {
+        // Security check for button click as well
+        if (interaction.user.id !== ALLOWED_USER_ID) {
+            return interaction.reply({ content: '❌ You do not have permission to use this button!', ephemeral: true });
         }
 
-        // 2. Modaller ve Menü Seçimleri
-        if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'guideModal1') {
-                const data = {
-                    title: interaction.fields.getTextInputValue('embedTitle'),
-                    desc: interaction.fields.getTextInputValue('embedDesc'),
-                    g1Name: interaction.fields.getTextInputValue('g1Name'),
-                    g1Text: interaction.fields.getTextInputValue('g1Text')
-                };
+        const modal = new ModalBuilder()
+            .setCustomId('guide_modal')
+            .setTitle('Create Guide Message');
 
-                const modal2 = new ModalBuilder()
-                    .setCustomId(`guideModal2_${Buffer.from(JSON.stringify(data)).toString('base64')}`)
-                    .setTitle('Rehber Oluşturucu (Devam 2/2)');
+        const messageInput = new TextInputBuilder()
+            .setCustomId('guide_text')
+            .setLabel('What is your guide message?')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Type your guide message here...')
+            .setRequired(true);
 
-                modal2.addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('g2Name').setLabel('2. Guide Adı').setMaxLength(100).setStyle(TextInputStyle.Short).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('g2Text').setLabel('2. Guide İçeriği').setStyle(TextInputStyle.Paragraph).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('g3Name').setLabel('3. Guide Adı').setMaxLength(100).setStyle(TextInputStyle.Short).setRequired(true)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('g3Text').setLabel('3. Guide İçeriği').setStyle(TextInputStyle.Paragraph).setRequired(true)
-                    )
-                );
+        const firstActionRow = new ActionRowBuilder().addComponents(messageInput);
+        modal.addComponents(firstActionRow);
 
-                return await interaction.showModal(modal2);
-            } 
-            else if (interaction.customId.startsWith('guideModal2_')) {
-                try {
-                    const encodedData = interaction.customId.split('_')[1];
-                    const data = JSON.parse(Buffer.from(encodedData, 'base64').toString('utf8'));
+        await interaction.showModal(modal);
+    }
 
-                    const g2Name = interaction.fields.getTextInputValue('g2Name');
-                    const g2Text = interaction.fields.getTextInputValue('g2Text');
-                    const g3Name = interaction.fields.getTextInputValue('g3Name');
-                    const g3Text = interaction.fields.getTextInputValue('g3Text');
-
-                    // Benzersiz bir ID üretelim ki çakışma olmasın
-                    const menuId = `guide_select_${Date.now()}`;
-
-                    const guides = {
-                        [data.g1Name]: data.g1Text,
-                        [g2Name]: g2Text,
-                        [g3Name]: g3Text
-                    };
-
-                    const embed = new EmbedBuilder()
-                        .setTitle(data.title)
-                        .setDescription(data.desc)
-                        .setColor(0x5865F2);
-
-                    const selectMenu = new StringSelectMenuBuilder()
-                        .setCustomId(menuId)
-                        .setPlaceholder('Bir rehber (guide) seçin...')
-                        .addOptions([
-                            { label: data.g1Name, description: `${data.g1Name} detayını görüntüle`, value: data.g1Name.substring(0, 100) },
-                            { label: g2Name, description: `${g2Name} detayını görüntüle`, value: g2Name.substring(0, 100) },
-                            { label: g3Name, description: `${g3Name} detayını görüntüle`, value: g3Name.substring(0, 100) }
-                        ]);
-
-                    const row = new ActionRowBuilder().addComponents(selectMenu);
-
-                    // Belirtilen kanala mesajı gönder
-                    await interaction.channel.send({ embeds: [embed], components: [row] });
-
-                    // Belleğe kaydet
-                    client.guideStorage[menuId] = guides;
-
-                    return await interaction.reply({ content: 'Rehber başarıyla oluşturuldu!', ephemeral: true });
-                } catch (error) {
-                    console.error("Guide oluşturulurken hata:", error);
-                    return await interaction.reply({ content: 'Rehber oluşturulurken bir hata oluştu!', ephemeral: true });
-                }
-            }
+    // 3. When the modal form is submitted
+    if (interaction.isModalSubmit() && interaction.customId === 'guide_modal') {
+        // Final security check
+        if (interaction.user.id !== ALLOWED_USER_ID) {
+            return interaction.reply({ content: '❌ You do not have permission to submit this form!', ephemeral: true });
         }
 
-        // 3. Menüden seçim yapıldığında (Kullanıcı menüden bir seçenek seçtiğinde)
-        if (interaction.isStringSelectMenu() && interaction.customId.startsWith('guide_select_')) {
-            const guides = client.guideStorage[interaction.customId];
-            const selectedValue = interaction.values[0];
-            const content = guides && guides[selectedValue] ? guides[selectedValue] : 'Rehber içeriği bulunamadı veya süre aşımına uğradı.';
+        const enteredText = interaction.fields.getTextInputValue('guide_text');
 
-            return await interaction.reply({ content: content, ephemeral: true });
+        // Target channel ID where the message will be sent:
+        const targetChannelId = 'HEDEF_KANAL_ID_BURAYA';
+        const channel = interaction.guild.channels.cache.get(targetChannelId);
+
+        if (!channel) {
+            return interaction.reply({ content: '❌ Error: Target channel not found!', ephemeral: true });
         }
-    });
-}
 
-module.exports = { setupGuideSystem };
+        // Send the message to the target channel
+        await channel.send({
+            content: `📢 **New Guide / Announcement:**\n\n${enteredText}`
+        });
+
+        // Confirm success to the user privately
+        await interaction.reply({ content: '✅ Your guide message has been successfully sent to the channel!', ephemeral: true });
+    }
+});
+
+// Log in using Railway's environment variable
+client.login(process.env.DISCORD_TOKEN);
