@@ -37,59 +37,65 @@ const ALLOWED_USER_ID = '1417227496251981895'; // Only this user ID can use the 
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 // ==========================================================================
-// 🛠️ YOU CAN EDIT GUIDE MENU OPTIONS AND DETAILED DESCRIPTIONS HERE
+// 🛠️ 7 METHODS GUIDE OPTIONS (Split into 2 menus because Discord limit is 5 per menu)
 // ==========================================================================
-const GUIDE_SELECT_OPTIONS = [
+const GUIDE_SELECT_OPTIONS_PART1 = [
   {
     label: '123 Method',
     description: 'Usernames with 123 at the end or start',
     value: 'guide_method_123',
     emoji: '🔢',
-    responseText: '🔢 **123 Method Details:**\n- The username must start or end with 123.\n- Example: `123john`, `alex123`'
+    responseText: '🔢 **123 Method Details:**\n- Usernames with 123 at the end or start\n- Example: `123john`, `alex123`'
   },
   {
     label: '2 Number Method',
     description: 'Usernames that contain 2 numbers',
     value: 'guide_method_2num',
     emoji: '💡',
-    responseText: '💡 **2 Number Method Details:**\n- Contains 2 random numbers inside the username.\n- Example: `pro99gamer`'
+    responseText: '💡 **2 Number Method Details:**\n- Usernames that contain 2 numbers\n- Example: `pro99gamer`'
   },
   {
     label: '321 Method',
     description: 'Usernames with 321 at the end or start',
     value: 'guide_method_321',
     emoji: '🔄',
-    responseText: '🔄 **321 Method Details:**\n- The username includes 321 at the beginning or at the end.'
+    responseText: '🔄 **321 Method Details:**\n- Usernames with 321 at the end or start'
   },
   {
     label: '4 Number Method',
-    description: 'Usernames with 4 numbers inside',
+    description: 'Usernames that contain 4 numbers',
     value: 'guide_method_4num',
     emoji: '🎰',
-    responseText: '🎰 **4 Number Method Details:**\n- Applicable rules and tactics for accounts containing a 4-digit number.'
+    responseText: '🎰 **4 Number Method Details:**\n- Usernames that contain 4 numbers'
   },
   {
     label: 'Cross Method',
-    description: 'Cross pattern username rules',
+    description: 'Usernames like 123acc123 or 1234acc1234',
     value: 'guide_method_cross',
     emoji: '❌',
-    responseText: '❌ **Cross Method Details:**\n- It is a method for finding cross-matching usernames.'
-  },
-  {
-    label: 'Double User Method',
-    description: 'Double pattern username rules',
-    value: 'guide_method_double',
-    emoji: '👥',
-    responseText: '👥 **Double User Method Details:**\n- Rules and guidelines for double-patterned or paired usernames.'
-  },
-  {
-    label: 'Year User Method',
-    description: 'Year-focused username rules',
-    value: 'guide_method_year',
-    emoji: '📅',
-    responseText: '📅 **Year User Method Details:**\n- Guidelines for accounts featuring specific year indicators in their structure.'
+    responseText: '❌ **Cross Method Details:**\n- Usernames like `123acc123` or `1234acc1234`'
   }
 ];
+
+const GUIDE_SELECT_OPTIONS_PART2 = [
+  {
+    label: 'Double Method',
+    description: 'Usernames like acc123123 or 123123acc',
+    value: 'guide_method_double',
+    emoji: '👥',
+    responseText: '👥 **Double Method Details:**\n- Usernames like `acc123123` or `123123acc`'
+  },
+  {
+    label: 'Year Method',
+    description: 'Usernames that contain the year 1999 - 2026',
+    value: 'guide_method_year',
+    emoji: '📅',
+    responseText: '📅 **Year Method Details:**\n- Usernames that contain the year 1999 - 2026 in them'
+  }
+];
+
+// Combine all for easy lookup
+const ALL_GUIDE_OPTIONS = [...GUIDE_SELECT_OPTIONS_PART1, ...GUIDE_SELECT_OPTIONS_PART2];
 
 const userGenCount = new Map();
 const cooldownsGen = new Map();
@@ -180,7 +186,7 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    // --- /guide Command Special Check (Should not be deferred because it opens a Modal) ---
+    // --- /guide Command Special Check ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'guide') {
       if (interaction.user.id !== ALLOWED_USER_ID) {
         return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
@@ -195,7 +201,7 @@ client.on('interactionCreate', async (interaction) => {
         .setLabel('Enter custom guide description/text:')
         .setStyle(TextInputStyle.Paragraph)
         .setPlaceholder('You can write your custom main guide text here...')
-        .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menu below to view specific methods and details.')
+        .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menus below to view specific methods and details.')
         .setRequired(true);
 
       modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
@@ -234,7 +240,7 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: '❌ You do not have permission to use this!', ephemeral: true });
         }
       } else if (interaction.customId.startsWith('guide_menu_select')) {
-        // Everyone can use the menu
+        // Everyone can use the menus
       } else if (ownerId && ownerId !== interaction.user.id && !interaction.customId.startsWith('action_')) {
         return await interaction.reply({ 
           content: '❌ You cannot use this menu or buttons as you did not run the command!', 
@@ -249,7 +255,7 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /guide Modal Submit (Send Embed + Custom Select Menu) ---
+    // --- /guide Modal Submit (Send Embed + 2 Custom Select Menus for all 7 methods) ---
     if (interaction.isModalSubmit() && interaction.customId === 'guide_main_modal') {
       const mainText = interaction.fields.getTextInputValue('guide_main_text');
       const channel = interaction.channel;
@@ -264,11 +270,11 @@ client.on('interactionCreate', async (interaction) => {
         .setColor('#2F3136')
         .setTimestamp();
 
-      const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('guide_menu_select')
-        .setPlaceholder('Make a selection...')
+      const selectMenu1 = new StringSelectMenuBuilder()
+        .setCustomId('guide_menu_select_1')
+        .setPlaceholder('Select methods (1-5)...')
         .addOptions(
-          GUIDE_SELECT_OPTIONS.map(opt => ({
+          GUIDE_SELECT_OPTIONS_PART1.map(opt => ({
             label: opt.label,
             description: opt.description,
             value: opt.value,
@@ -276,20 +282,33 @@ client.on('interactionCreate', async (interaction) => {
           }))
         );
 
-      const row = new ActionRowBuilder().addComponents(selectMenu);
+      const selectMenu2 = new StringSelectMenuBuilder()
+        .setCustomId('guide_menu_select_2')
+        .setPlaceholder('Select methods (6-7)...')
+        .addOptions(
+          GUIDE_SELECT_OPTIONS_PART2.map(opt => ({
+            label: opt.label,
+            description: opt.description,
+            value: opt.value,
+            emoji: opt.emoji
+          }))
+        );
+
+      const row1 = new ActionRowBuilder().addComponents(selectMenu1);
+      const row2 = new ActionRowBuilder().addComponents(selectMenu2);
 
       await channel.send({
         embeds: [guideEmbed],
-        components: [row]
+        components: [row1, row2]
       });
 
-      return await interaction.reply({ content: '✅ Custom interactive guide panel successfully sent to this channel!', ephemeral: true });
+      return await interaction.reply({ content: '✅ Custom interactive guide panel (with all 7 methods) successfully sent to this channel!', ephemeral: true });
     }
 
-    // --- Guide Select Menu Interaction ---
-    if (interaction.isStringSelectMenu() && interaction.customId === 'guide_menu_select') {
+    // --- Guide Select Menu Interaction (Handles both menus) ---
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('guide_menu_select_')) {
       const selectedValue = interaction.values[0];
-      const selectedOption = GUIDE_SELECT_OPTIONS.find(opt => opt.value === selectedValue);
+      const selectedOption = ALL_GUIDE_OPTIONS.find(opt => opt.value === selectedValue);
 
       const responseText = selectedOption ? selectedOption.responseText : '❌ Content not found.';
 
@@ -393,7 +412,7 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // --- /bulk-gen Year Selection ---
+    // --- /bulk-gen Year Selection (Includes all 7 methods in buttons) ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('bulk_year_')) {
       const parts = interaction.customId.split('_');
       const amount = parts[2];
@@ -489,7 +508,7 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // --- /gen Year Selection ---
+    // --- /gen Year Selection (Includes all 7 methods in buttons) ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_year_')) {
       const selectedYear = interaction.values[0];
       const ownerId = interaction.customId.split('_')[2];
