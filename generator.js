@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Etiket Uyumlu Kesin Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Tüm Metodlar Aktif ve Kesin Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production-d990.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -15,7 +15,7 @@ const YEARS = Object.keys(YEAR_ID_RANGES);
 const addedAccountIds = new Set();
 const scannedIds = new Set();
 
-// Discord tarafındaki etiketlerle birebir eşleştirilen liste
+// Tüm metotlar eksiksiz sırada
 const TARGET_METHODS = [
   'year_user',
   'cross_user',
@@ -47,8 +47,8 @@ function validateUsernameByFilter(username, targetMethod) {
 
   switch (targetMethod) {
     case 'year_user':
-      // Örnek: isim20007, isim200131, isim19981998 (1998-2026 arası yıl içermeli ve devamı gelebilir)
-      const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
+      // Kesin kural: İsmin sonunda MUTLAKA 1998 ile 2026 arasında bir yıl olacak (Örn: john2008, ali2015)
+      const yearMatch = lowerName.match(/(199\d|20[0-2]\d)$/);
       if (yearMatch) {
         const yearVal = parseInt(yearMatch[1], 10);
         if (yearVal >= 1998 && yearVal <= 2026) return 'year_user';
@@ -56,7 +56,6 @@ function validateUsernameByFilter(username, targetMethod) {
       return null;
 
     case 'cross_user':
-      // Örnek: 123isim123isim, 123isim123, isim123isim, isim123isim123
       if (/^(\d{2,4})([a-z]+)\1(\2)?$/.test(lowerName) || 
           /^([a-z]+)(\d{2,4})\1(\2)?$/.test(lowerName) ||
           /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
@@ -66,38 +65,34 @@ function validateUsernameByFilter(username, targetMethod) {
       return null;
 
     case 'double_user':
-      // Örnek: İsim90909090, isim909090, isim9090
-      if (/^[a-z]+(\d{2,4})\1{1,3}$/.test(lowerName)) {
+      // Örnek: isim9090, isim121212
+      if (/^[a-z]+(\d{2})\1{1,2}$/.test(lowerName) || /^[a-z]+(\d{3})\1{1,2}$/.test(lowerName)) {
         return 'double_user';
       }
       return null;
 
     case '2_number_method':
-      // Örnek: Sonunda rastgele 2 sayı olan isimler
       if (/^[a-z]+\d{2}$/.test(lowerName)) {
         return '2_number_method';
       }
       return null;
 
     case '4_number_method':
-      // Örnek: Sonunda rastgele 4 sayı olan isimler
       if (/^[a-z]+\d{4}$/.test(lowerName)) {
         return '4_number_method';
       }
       return null;
 
     case '123_method':
-      // Örnek: isim123123, isim123, isim1234, isim12341234
-      if (/^[a-z]+(123|1234|123123|12341234)+$/.test(lowerName) || 
-          /^(123|1234|123123)[a-z]+$/.test(lowerName)) {
+      // İçinde veya sonunda 123, 1234, 123123 geçenler
+      if (/[a-z]+(123|1234|123123)+/.test(lowerName)) {
         return '123_method';
       }
       return null;
 
     case '321_method':
-      // Örnek: isim321, isim321321
-      if (/^[a-z]+(321|321321)+$/.test(lowerName) || 
-          /^(321|321321)[a-z]+$/.test(lowerName)) {
+      // İçinde veya sonunda 321, 321321 geçenler
+      if (/[a-z]+(321|321321)+/.test(lowerName)) {
         return '321_method';
       }
       return null;
@@ -147,7 +142,11 @@ async function main() {
       const username = res.data.name;
       
       const matchedFilter = validateUsernameByFilter(username, currentMethod);
-      if (!matchedFilter) continue;
+      if (!matchedFilter) {
+        // Eşleşmezse bir sonraki metoda geç ki döngü takılmasın
+        methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
+        continue;
+      }
 
       methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
       addedAccountIds.add(accountIdStr);
@@ -180,7 +179,7 @@ async function main() {
         }
       }));
       
-      console.log(`[BAŞARILI] Metot: ${matchedFilter} | Hesap: ${username}`);
+      console.log(`[KESİN BAŞARILI] Metot: ${matchedFilter} | Hesap: ${username}`);
       
       await sleep(15);
 
