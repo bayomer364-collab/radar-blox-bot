@@ -554,7 +554,10 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       try {
-        await interaction.user.send({ embeds: embeds });
+        // HATA ÇÖZÜMÜ: 6000 karakter sınırını aşmamak için embed'leri tekli olarak döngüyle gönderiyoruz.
+        for (const embed of embeds) {
+          await interaction.user.send({ embeds: [embed] });
+        }
         await interaction.editReply({ content: '✅ Accounts successfully sent to your DMs!', components: [] });
       } catch (e) {
         await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
