@@ -74,6 +74,20 @@ const GUIDE_SELECT_OPTIONS = [
     value: 'guide_method_cross',
     emoji: '❌',
     responseText: '❌ **Cross Method Details:**\n- It is a method for finding cross-matching usernames.'
+  },
+  {
+    label: 'Double User Method',
+    description: 'Double pattern username rules',
+    value: 'guide_method_double',
+    emoji: '👥',
+    responseText: '👥 **Double User Method Details:**\n- Rules and guidelines for double-patterned or paired usernames.'
+  },
+  {
+    label: 'Year User Method',
+    description: 'Year-focused username rules',
+    value: 'guide_method_year',
+    emoji: '📅',
+    responseText: '📅 **Year User Method Details:**\n- Guidelines for accounts featuring specific year indicators in their structure.'
   }
 ];
 
