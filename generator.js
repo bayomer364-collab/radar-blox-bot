@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Dual-Stock Modu) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Dual-Stock Modu ve Tekrar Önleme) Başlatıldı!');
 
 // DİKKAT: Buradaki domain adresini kendi Railway domain adresinle değiştirdiğinden emin ol!
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
@@ -14,6 +14,9 @@ const YEAR_ID_RANGES = {
 
 const YEARS = Object.keys(YEAR_ID_RANGES);
 let currentIds = { ...YEAR_ID_RANGES };
+
+// Daha önce stoğa eklenen hesapların ID'lerini saklamak için bir Set (Aynı hesabın tekrar eklenmesini engeller)
+const addedAccountIds = new Set();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -34,11 +37,11 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
 
-  // 1. cross_user kontrolü (İsmin başında/sonunda veya içinde tekrarlı kalıplar: örn. 123isim123, isim123isim vb.)
+  // 1. cross_user kontrolü
   const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
   if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
   
-  // 2. year_user kontrolü (Sadece sonda değil, ismin içinde de farklı sayılarla birleşik olabilir)
+  // 2. year_user kontrolü
   if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) {
     return 'year_user';
   }
@@ -46,10 +49,10 @@ function validateUsernameByFilter(username) {
   // 3. double_user kontrolü
   if (/(\d{2})\1/.test(lowerName)) return 'double_user';
 
-  // 4. 123_method kontrolü (123, 1234, 123123 gibi benzer biten veya başlayan kalıplar)
+  // 4. 123_method kontrolü
   if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
 
-  // 5. 321_method kontrolü (321, 4321, 321321 gibi benzer geri sayım kalıpları)
+  // 5. 321_method kontrolü
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
 
   // 6. 2_number_method kontrolü
@@ -79,8 +82,16 @@ async function main() {
   while (true) {
     try {
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
-      const testId = currentIds[targetYear] + Math.floor(Math.random() * 2000);
-      currentIds[targetYear] += 2000; 
+      
+      // Sürekli aynı hesapların dönmemesi için ID aralığını daha geniş bir rastgelelikle tarıyoruz
+      const randomOffset = Math.floor(Math.random() * 50000);
+      const testId = currentIds[targetYear] + randomOffset;
+      currentIds[targetYear] += 1500; 
+
+      // Eğer bu hesap ID'si daha önce stoğa eklendiyse direkt atla
+      if (addedAccountIds.has(testId)) {
+        continue;
+      }
 
       const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
       
@@ -91,7 +102,14 @@ async function main() {
       }
 
       if (!res.data || !res.data.name) {
-        await sleep(200);
+        await sleep(150);
+        continue;
+      }
+
+      const accountIdStr = res.data.id.toString();
+
+      // Kesin güvenlik: Bu kullanıcı ID'si daha önce işlendiyse döngünün başına dön
+      if (addedAccountIds.has(accountIdStr)) {
         continue;
       }
 
@@ -99,6 +117,10 @@ async function main() {
       const matchedFilter = validateUsernameByFilter(username);
       
       if (!matchedFilter) continue;
+
+      // Hesabı benzersizler listesine ekle ki bir daha asla seçilmesin
+      addedAccountIds.add(accountIdStr);
+      // Belleğin şişmesini önlemek için liste çok büyürse (örn. 50 bin kayıt) eski kayıtları temizleyebilirsiniz ama şimdilik idealdir.
 
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
@@ -108,7 +130,7 @@ async function main() {
         targetYear: new Date(res.data.created).getFullYear().toString(),
         filterType: matchedFilter,
         accountData: {
-          id: res.data.id.toString(),
+          id: accountIdStr,
           name: username,
           createdDate: res.data.created.split('T')[0],
           isBanned: res.data.isBanned || false,
@@ -118,8 +140,8 @@ async function main() {
         }
       }));
       
-      console.log(`[BAŞARILI] Hesap Bulundu ve Stoklara Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter} | Webhook Yanıt Kodu: ${webhookResponseCode}`);
-      await sleep(500);
+      console.log(`[BAŞARILI] Yeni Hesap Eklendi: ${username} | Yıl: ${targetYear} | Format: ${matchedFilter} | Webhook Yanıt Kodu: ${webhookResponseCode}`);
+      await sleep(400);
 
     } catch (err) {
       console.error('[HATA] Beklenmedik bir hata oluştu:', err);
