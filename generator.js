@@ -32,15 +32,36 @@ function fetchJSON(url) {
 
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
+  
+  // 1. Cross Method (Örn: 123acc123 veya 1234acc1234)
   const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
   if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
-  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) return 'year_user';
-  if (/(\d{2})\1/.test(lowerName)) return 'double_user';
+
+  // 2. Double Method (Örn: acc123123, 123123acc, acc19981998)
+  if (/([a-zA-Z]+)(\d{2,4})\2$/.test(lowerName) || /^(\d{2,4})\1([a-zA-Z]+)$/.test(lowerName)) return 'double_user';
+
+  // 3. Year Method (1999 - 2026 arası, esnek varyasyonlar: acc200131, acc20007 vb.)
+  if (/\b(199\d|20[0-2]\d)\b/.test(lowerName) || /([a-zA-Z]+)(199\d|20[0-2]\d)(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) {
+    const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
+    if (yearMatch) {
+      const yearVal = parseInt(yearMatch[1], 10);
+      if (yearVal >= 1999 && yearVal <= 2026) return 'year_user';
+    }
+  }
+
+  // 4. 123 Method (123, 1234, 123123 vb. başta veya sonda)
   if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
+
+  // 5. 321 Method (321, 4321, 321321 vb. başta veya sonda)
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
+
+  // 6. Sayı Adedi Bazlı Filtreler (Stok dengesizliğini önlemek için daha net sınırlandırıldı)
   const digits = lowerName.match(/\d/g);
-  if (digits && digits.length === 2) return '2_number_method';
-  if (digits && digits.length === 4) return '4_number_method';
+  if (digits) {
+    if (digits.length === 2 && !/(123|321)/.test(lowerName)) return '2_number_method';
+    if (digits.length === 4 && !/(123|321)/.test(lowerName)) return '4_number_method';
+  }
+
   return null;
 }
 
@@ -69,11 +90,11 @@ async function main() {
 
       const res = await fetchJSON(`https://users.roblox.com/v1/users/${testId}`);
       if (res.status === 429) {
-        await sleep(15000); // Rate limit durumunda bekleme süresini optimize ettik
+        await sleep(15000);
         continue;
       }
       if (!res.data || !res.data.name) {
-        continue; // Boş hesaplarda fazladan beklemeyi (sleep) kaldırarak hızı artırdık
+        continue;
       }
 
       const accountIdStr = res.data.id.toString();
@@ -118,7 +139,6 @@ async function main() {
         console.log(`[TURBO BAŞARILI] ${isOffSaleAccount ? 'OFF-SALE' : 'EŞYALI'} Hesap: ${username} | Eşya: ${itemCount} | Tip: ${matchedFilter}`);
       }
       
-      // HIZLANDIRMA: İstekler arası bekleme süresini 400ms'den 60ms'ye düşürdük
       await sleep(60);
 
     } catch (err) {
