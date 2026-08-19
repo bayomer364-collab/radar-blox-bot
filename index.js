@@ -166,29 +166,30 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    if (interaction.isChatInputCommand()) {
-      // /guide komutu özel olarak işleniyor ve diğer komutların ortak önbellek/bekletme süreçlerine sokulmuyor
-      if (interaction.commandName === 'guide') {
-        if (interaction.user.id !== ALLOWED_USER_ID) {
-          return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
-        }
-
-        const modal = new ModalBuilder()
-          .setCustomId('guide_main_modal')
-          .setTitle('Create Custom Guide Panel');
-
-        const messageInput = new TextInputBuilder()
-          .setCustomId('guide_main_text')
-          .setLabel('Enter custom guide description/text:')
-          .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Buraya kendi ana rehber yazını yazabilirsin...')
-          .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menu below to view specific methods and details.')
-          .setRequired(true);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
-        return await interaction.showModal(modal);
+    // --- /guide Komutu Özel Kontrolü (Modal açacağı için defer edilmemeli) ---
+    if (interaction.isChatInputCommand() && interaction.commandName === 'guide') {
+      if (interaction.user.id !== ALLOWED_USER_ID) {
+        return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
       }
 
+      const modal = new ModalBuilder()
+        .setCustomId('guide_main_modal')
+        .setTitle('Create Custom Guide Panel');
+
+      const messageInput = new TextInputBuilder()
+        .setCustomId('guide_main_text')
+        .setLabel('Enter custom guide description/text:')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Buraya kendi ana rehber yazını yazabilirsin...')
+        .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menu below to view specific methods and details.')
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
+      return await interaction.showModal(modal);
+    }
+
+    // --- Diğer Chat Input Komutları ---
+    if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
       const cooldownMap = isBulk ? cooldownsBulk : cooldownsGen;
