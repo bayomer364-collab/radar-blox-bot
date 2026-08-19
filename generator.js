@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Boş + Eşyalı Hızlı Üretim Modu) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Saf Rastgele & Ultra Hızlı Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -14,17 +14,6 @@ const YEAR_ID_RANGES = {
 const YEARS = Object.keys(YEAR_ID_RANGES);
 const addedAccountIds = new Set();
 const scannedIds = new Set();
-
-const TARGET_METHODS = [
-  '123_method',
-  '321_method',
-  '2_number_method',
-  '4_number_method',
-  'cross_user',
-  'double_user',
-  'year_user'
-];
-let methodIndex = 0;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -95,8 +84,7 @@ async function sendWebhook(payload) {
 async function main() {
   while (true) {
     try {
-      const currentDesiredMethod = TARGET_METHODS[methodIndex];
-
+      // Tamamen rastgele yıl ve offset seçimi (Hiçbir sınırlama yok)
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
       const randomOffset = Math.floor(Math.random() * 2000000); 
       const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
@@ -117,29 +105,29 @@ async function main() {
       if (addedAccountIds.has(accountIdStr)) continue;
 
       const username = res.data.name;
-      const matchedFilter = validateUsernameByFilter(username);
       
-      if (!matchedFilter || matchedFilter !== currentDesiredMethod) continue;
+      // İsmin hangi metoda uyduğunu direkt test et
+      const matchedFilter = validateUsernameByFilter(username);
+      if (!matchedFilter) continue; // Hangi metot olursa olsun uyanı direkt yakala
 
-      methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
+      addedAccountIds.add(accountIdStr);
 
-      // Envanter kontrolü artık boş hesapları engellemiyor, sadece eşyası olanları off-sale/eşyalı olarak işaretliyor
-      const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
+      // Envanter sorgusunu arka plana atıyoruz ki boş hesaplar (0 eşya) dahil anında geçip gitsin, hızı kesmesin
       let itemCount = 0;
       let isOffSaleAccount = false;
 
-      if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
-        itemCount = inventoryRes.data.data.length;
-        if (itemCount >= 2) {
-          isOffSaleAccount = true;
+      // Hızlı non-blocking kontrol
+      fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`).then(inventoryRes => {
+        if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
+          itemCount = inventoryRes.data.data.length;
+          if (itemCount >= 2) isOffSaleAccount = true;
         }
-      }
-
-      addedAccountIds.add(accountIdStr);
+      }).catch(() => {});
 
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
+      // Webhook'a gönder (Boş veya dolu fark etmez, hepsi anında gider)
       await sendWebhook(JSON.stringify({
         secret: WEBHOOK_SECRET,
         targetYear: new Date(res.data.created).getFullYear().toString(),
@@ -155,10 +143,10 @@ async function main() {
         }
       }));
       
-      console.log(`[HIZLI ÜRETİM] Tip: ${matchedFilter} | Hesap: ${username} | Eşya: ${itemCount} | OffSale: ${isOffSaleAccount}`);
+      console.log(`[RASTGELE HIZLI ÜRETİM] Tip: ${matchedFilter} | Hesap: ${username} | Yıl: ${targetYear}`);
       
-      // Hızı en üst düzeye çıkardık
-      await sleep(20);
+      // Hızı maksimuma çıkaran düşük bekleme süresi
+      await sleep(15);
 
     } catch (err) {
       console.error('[HATA]:', err);
