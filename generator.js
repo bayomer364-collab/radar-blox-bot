@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Saf & Eşit Dağılımlı Ultra Hızlı Mod) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Düzeltilmiş Filtre Sıralaması ve Ultra Hızlı Mod) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -33,7 +33,7 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
   
-  // 1. Cross Method (123isim123, isim123isim, 123isim123isim vb.)
+  // 1. Cross Method (123isim123, isim123isim, 123isim123isim vb.) - En özel olanlar önce kontrol edilir
   if (/^(\d{2,4})([a-z]+)\1$/.test(lowerName) || 
       /^([a-z]+)(\d{2,4})\1$/.test(lowerName) || 
       /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
@@ -46,24 +46,26 @@ function validateUsernameByFilter(username) {
     return 'double_user';
   }
 
-  // 3. Year Method (1999 - 2026 arası esnek yıllar: acc200131, chicka2006 vb.)
-  const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
-  if (yearMatch) {
-    const yearVal = parseInt(yearMatch[1], 10);
-    if (yearVal >= 1999 && yearVal <= 2026) return 'year_user';
-  }
-
-  // 4. 123 Method (123, 1234, 123123 vb. başta veya sonda)
+  // 3. 123 Method (123, 1234, 123123 vb. başta veya sonda)
   if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) {
     return '123_method';
   }
 
-  // 5. 321 Method (321, 4321, 321321 vb. başta veya sonda)
+  // 4. 321 Method (321, 4321, 321321 vb. başta veya sonda)
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) {
     return '321_method';
   }
 
-  // 6. Sayı Adedi Bazlı Filtreler (2 Number ve 4 Number)
+  // 5. Year Method (1999 - 2026 arası geçerli yıllar)
+  const yearMatch = lowerName.match(/(199\d|20[0-2]\d)/);
+  if (yearMatch) {
+    const yearVal = parseInt(yearMatch[1], 10);
+    if (yearVal >= 1999 && yearVal <= 2026) {
+      return 'year_user';
+    }
+  }
+
+  // 6. Sayı Adedi Bazlı Filtreler (En sonda incelenir ki diğerlerini yutmasın)
   const digits = lowerName.match(/\d/g);
   if (digits) {
     if (digits.length === 2) return '2_number_method';
@@ -114,7 +116,6 @@ async function main() {
 
       addedAccountIds.add(accountIdStr);
 
-      // Envanter ve avatar işlemlerini tamamen arka plana atıyoruz ki bot hız kesmesin, boş hesaplar da anında gitsin
       let itemCount = 0;
       let isOffSaleAccount = false;
 
@@ -145,7 +146,6 @@ async function main() {
       
       console.log(`[HIZLI GEN] Metot: ${matchedFilter} | Hesap: ${username}`);
       
-      // Hızı maksimum (10ms) seviyeye çektik
       await sleep(10);
 
     } catch (err) {
