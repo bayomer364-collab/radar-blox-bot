@@ -1,125 +1,7 @@
-const https = require('https');
-
-console.log('[DEBUG] Generator.js (Tüm Metodlar Aktif ve Kesin Mod) Başlatıldı!');
-
-const WEBHOOK_URL = 'https://radar-blox-bot-production-d990.up.railway.app/api/add-account';
-const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
-
-const YEAR_ID_RANGES = {
-  '2006': 100000, '2007': 500000, '2008': 1500000, '2009': 3000000,
-  '2010': 5000001, '2011': 13000001, '2012': 25000001, '2013': 40000001,
-  '2014': 60000001, '2015': 80000001, '2016': 110000000
-};
-
-const YEARS = Object.keys(YEAR_ID_RANGES);
-const addedAccountIds = new Set();
-const scannedIds = new Set();
-
-// Tüm metotlar eksiksiz sırada
-const TARGET_METHODS = [
-  'year_user',
-  'cross_user',
-  'double_user',
-  '2_number_method',
-  '4_number_method',
-  '123_method',
-  '321_method'
-];
-let methodIndex = 0;
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-function fetchJSON(url) {
-  return new Promise((resolve) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve({ status: res.statusCode, data: JSON.parse(data) }); } 
-        catch (e) { resolve({ status: res.statusCode, data: null }); }
-      });
-    }).on('error', () => { resolve({ status: 500, data: null }); });
-  });
-}
-
-function validateUsernameByFilter(username, targetMethod) {
-  const lowerName = username.toLowerCase();
-
-  switch (targetMethod) {
-    case 'year_user':
-      // Kesin kural: İsmin sonunda MUTLAKA 1998 ile 2026 arasında bir yıl olacak (Örn: john2008, ali2015)
-      const yearMatch = lowerName.match(/(199\d|20[0-2]\d)$/);
-      if (yearMatch) {
-        const yearVal = parseInt(yearMatch[1], 10);
-        if (yearVal >= 1998 && yearVal <= 2026) return 'year_user';
-      }
-      return null;
-
-    case 'cross_user':
-      if (/^(\d{2,4})([a-z]+)\1(\2)?$/.test(lowerName) || 
-          /^([a-z]+)(\d{2,4})\1(\2)?$/.test(lowerName) ||
-          /^(\d{2,4})([a-z]+)\1([a-z]+)$/.test(lowerName) ||
-          /^([a-z]+)(\d{2,4})([a-z]+)\2$/.test(lowerName)) {
-        return 'cross_user';
-      }
-      return null;
-
-    case 'double_user':
-      // Örnek: isim9090, isim121212
-      if (/^[a-z]+(\d{2})\1{1,2}$/.test(lowerName) || /^[a-z]+(\d{3})\1{1,2}$/.test(lowerName)) {
-        return 'double_user';
-      }
-      return null;
-
-    case '2_number_method':
-      if (/^[a-z]+\d{2}$/.test(lowerName)) {
-        return '2_number_method';
-      }
-      return null;
-
-    case '4_number_method':
-      if (/^[a-z]+\d{4}$/.test(lowerName)) {
-        return '4_number_method';
-      }
-      return null;
-
-    case '123_method':
-      // İçinde veya sonunda 123, 1234, 123123 geçenler
-      if (/[a-z]+(123|1234|123123)+/.test(lowerName)) {
-        return '123_method';
-      }
-      return null;
-
-    case '321_method':
-      // İçinde veya sonunda 321, 321321 geçenler
-      if (/[a-z]+(321|321321)+/.test(lowerName)) {
-        return '321_method';
-      }
-      return null;
-
-    default:
-      return null;
-  }
-}
-
-async function sendWebhook(payload) {
-  return new Promise((resolve) => {
-    const webhookUrl = new URL(WEBHOOK_URL);
-    const req = https.request({
-      hostname: webhookUrl.hostname, port: 443, path: webhookUrl.pathname,
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-    }, (res) => resolve(res.statusCode));
-    req.on('error', () => resolve(500));
-    req.write(payload);
-    req.end();
-  });
-}
-
-async function main() {
+async function runGeneratorLoop() {
+  console.log('[DEBUG] Embedded Generator (Turbo & Hızlı Üretim Modu) Başlatıldı!');
   while (true) {
     try {
-      const currentMethod = TARGET_METHODS[methodIndex];
-
       const targetYear = YEARS[Math.floor(Math.random() * YEARS.length)];
       const randomOffset = Math.floor(Math.random() * 2000000); 
       const testId = YEAR_ID_RANGES[targetYear] + randomOffset;
@@ -140,48 +22,71 @@ async function main() {
       if (addedAccountIds.has(accountIdStr)) continue;
 
       const username = res.data.name;
-      
-      const matchedFilter = validateUsernameByFilter(username, currentMethod);
-      if (!matchedFilter) {
-        // Eşleşmezse bir sonraki metoda geç ki döngü takılmasın
-        methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
-        continue;
-      }
+      const matchedFilter = validateUsernameByFilter(username);
+      if (!matchedFilter) continue; // Kullanıcı adı filtrelere uymuyorsa atla
 
-      methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
-      addedAccountIds.add(accountIdStr);
-
+      // Envanter kontrolü (Sadece Off-Sale / Eşyalı seçimi için)
+      const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
       let itemCount = 0;
       let isOffSaleAccount = false;
 
-      fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`).then(inventoryRes => {
-        if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
-          itemCount = inventoryRes.data.data.length;
-          if (itemCount >= 2) isOffSaleAccount = true;
+      if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
+        itemCount = inventoryRes.data.data.length;
+        if (itemCount >= 2) {
+          isOffSaleAccount = true;
         }
-      }).catch(() => {});
+      }
+
+      addedAccountIds.add(accountIdStr);
 
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-      await sendWebhook(JSON.stringify({
-        secret: WEBHOOK_SECRET,
-        targetYear: new Date(res.data.created).getFullYear().toString(),
-        filterType: matchedFilter,
-        isOffSale: isOffSaleAccount,
-        accountData: {
-          id: accountIdStr,
-          name: username,
-          createdDate: res.data.created.split('T')[0],
-          isBanned: res.data.isBanned || false,
-          itemCount: itemCount,
-          avatarUrl: avatarUrl
+      const accountYear = new Date(res.data.created).getFullYear().toString();
+      const db = getDB();
+      
+      const accountData = {
+        id: accountIdStr,
+        name: username,
+        createdDate: res.data.created.split('T')[0],
+        isBanned: res.data.isBanned || false,
+        itemCount: itemCount,
+        avatarUrl: avatarUrl
+      };
+
+      let added = false;
+
+      // 1. Normal Gen ve Bulk havuzuna ekle (Envanterinde eşya olmasa bile kullanıcı adı uygunsa eklenir!)
+      const genKey = `gen_${accountYear}_${matchedFilter}`;
+      const bulkKey = `bulk_${accountYear}_${matchedFilter}`;
+
+      if (!db[genKey]) db[genKey] = [];
+      if (!db[bulkKey]) db[bulkKey] = [];
+
+      if (!db[genKey].some(acc => acc.id === accountData.id)) {
+        db[genKey].push(accountData);
+        added = true;
+      }
+      if (!db[bulkKey].some(acc => acc.id === accountData.id)) {
+        db[bulkKey].push(accountData);
+        added = true;
+      }
+
+      // 2. Eğer en az 2 limited eşyası varsa Off-sale havuzuna da ekle
+      if (isOffSaleAccount) {
+        const offsaleKey = `offsale_${accountYear}_${matchedFilter}`;
+        if (!db[offsaleKey]) db[offsaleKey] = [];
+        if (!db[offsaleKey].some(acc => acc.id === accountData.id)) {
+          db[offsaleKey].push(accountData);
+          added = true;
         }
-      }));
+      }
+
+      if (added) saveDB();
+
+      console.log(`[TURBO BAŞARILI] Hesap Eklendi: ${username} | Yıl: ${accountYear} | Tip: ${matchedFilter} | Eşya: ${itemCount}`);
       
-      console.log(`[KESİN BAŞARILI] Metot: ${matchedFilter} | Hesap: ${username}`);
-      
-      await sleep(15);
+      await sleep(60);
 
     } catch (err) {
       console.error('[HATA]:', err);
@@ -189,5 +94,3 @@ async function main() {
     }
   }
 }
-
-main();
