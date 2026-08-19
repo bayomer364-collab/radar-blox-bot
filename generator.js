@@ -1,6 +1,6 @@
 const https = require('https');
 
-console.log('[DEBUG] Generator.js (Hızlı & Düzeltilmiş Üretim Modu) Başlatıldı!');
+console.log('[DEBUG] Generator.js (Boş + Eşyalı Hızlı Üretim Modu) Başlatıldı!');
 
 const WEBHOOK_URL = 'https://radar-blox-bot-production.up.railway.app/api/add-account';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
@@ -44,7 +44,7 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
   
-  // 1. Düzeltilmiş Cross Method (Örn: 123isim123, isim123isim, 123isim123isim)
+  // 1. Cross Method (Örn: 123isim123, isim123isim, 123isim123isim)
   const crossMatch = lowerName.match(/^(\d{2,4})([a-z]+)\1$/) || 
                      lowerName.match(/^([a-z]+)(\d{2,4})\1$/) || 
                      lowerName.match(/^(\d{2,4})([a-z]+)\1([a-z]+)$/) ||
@@ -63,10 +63,10 @@ function validateUsernameByFilter(username) {
     }
   }
 
-  // 4. 123 Method (123, 1234, 123123 vb. başta veya sonda)
+  // 4. 123 Method
   if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
 
-  // 5. 321 Method (321, 4321, 321321 vb. başta veya sonda)
+  // 5. 321 Method
   if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
 
   // 6. Sayı Adedi Bazlı Filtreler
@@ -123,7 +123,7 @@ async function main() {
 
       methodIndex = (methodIndex + 1) % TARGET_METHODS.length;
 
-      // HIZLANDIRMA: Boş hesapların da (itemCount: 0) sisteme hızlıca dahil edilmesi için envanter kontrolü yavaşlatmasın diye optimize edildi
+      // Envanter kontrolü artık boş hesapları engellemiyor, sadece eşyası olanları off-sale/eşyalı olarak işaretliyor
       const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
       let itemCount = 0;
       let isOffSaleAccount = false;
@@ -155,10 +155,10 @@ async function main() {
         }
       }));
       
-      console.log(`[HIZLI ÜRETİM] Tip: ${matchedFilter} | Hesap: ${username} | Eşya: ${itemCount}`);
+      console.log(`[HIZLI ÜRETİM] Tip: ${matchedFilter} | Hesap: ${username} | Eşya: ${itemCount} | OffSale: ${isOffSaleAccount}`);
       
-      // Hızın düşmemesi için bekleme süresi minimumda tutuldu
-      await sleep(30);
+      // Hızı en üst düzeye çıkardık
+      await sleep(20);
 
     } catch (err) {
       console.error('[HATA]:', err);
