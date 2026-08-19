@@ -30,28 +30,30 @@ function fetchJSON(url) {
   });
 }
 
-// Filtre doğrulama mekanizması
+// Filtre doğrulama mekanizması (Güncellenmiş Esnek Yapı)
 function validateUsernameByFilter(username) {
-  // 1. cross_user kontrolü
-  const crossMatch = username.match(/^([a-zA-Z0-9]{2,4}).*?\1$/);
-  if (crossMatch && username.length > crossMatch[1].length * 2) return 'cross_user';
+  const lowerName = username.toLowerCase();
+
+  // 1. cross_user kontrolü (İsmin başında/sonunda veya içinde tekrarlı kalıplar: örn. 123isim123, isim123isim vb.)
+  const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
+  if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
   
-  // 2. year_user kontrolü
-  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)$/.test(username) || /(19\d{2}|20\d{2})/.test(username)) {
+  // 2. year_user kontrolü (Sadece sonda değil, ismin içinde de farklı sayılarla birleşik olabilir)
+  if (/([a-zA-Z]+)(19\d{2}|20\d{2})(\d*)/.test(lowerName) || /([a-zA-Z]+)(\d{4,8})/.test(lowerName)) {
     return 'year_user';
   }
   
   // 3. double_user kontrolü
-  if (/(\d{2})\1/.test(username)) return 'double_user';
+  if (/(\d{2})\1/.test(lowerName)) return 'double_user';
 
-  // 4. 123_method kontrolü
-  if (/^123|123$/.test(username)) return '123_method';
+  // 4. 123_method kontrolü (123, 1234, 123123 gibi benzer biten veya başlayan kalıplar)
+  if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
 
-  // 5. 321_method kontrolü
-  if (/^321|321$/.test(username)) return '321_method';
+  // 5. 321_method kontrolü (321, 4321, 321321 gibi benzer geri sayım kalıpları)
+  if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
 
   // 6. 2_number_method kontrolü
-  const digits = username.match(/\d/g);
+  const digits = lowerName.match(/\d/g);
   if (digits && digits.length === 2) return '2_number_method';
 
   // 7. 4_number_method kontrolü
