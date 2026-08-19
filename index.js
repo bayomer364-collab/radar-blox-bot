@@ -34,6 +34,7 @@ const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const ROLE_ID = '1538940771967700992';
 const ALLOWED_USER_ID = '1417227496251981895'; // Sadece bu ID /guide komutunu ve paneli kullanabilir
+const TARGET_CHANNEL_ID = '1538525897005473812'; // Rehber mesajının atılacağı kanal ID'si
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 const userGenCount = new Map();
@@ -126,7 +127,7 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
-      // /guide komutu için cooldown ve genel işlem mesajını atlıyoruz (çünkü özel yetkili ve paneli açacak)
+      // /guide komutu için cooldown ve genel işlem mesajını atlıyoruz
       if (interaction.commandName === 'guide') {
         if (interaction.user.id !== ALLOWED_USER_ID) {
           return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
@@ -215,12 +216,18 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isModalSubmit() && interaction.customId === 'guide_modal') {
       const enteredText = interaction.fields.getTextInputValue('guide_text');
 
-      // Mesajın gönderilmesini istediğin kanalın ID'sini buraya yazmalısın:
-      const targetChannelId = 'HEDEF_KANAL_ID_BURAYA';
-      const channel = interaction.guild.channels.cache.get(targetChannelId);
+      // Kanali cache veya fetch ile güvenli bir şekilde alıyoruz
+      let channel = interaction.guild.channels.cache.get(TARGET_CHANNEL_ID);
+      if (!channel) {
+        try {
+          channel = await interaction.guild.channels.fetch(TARGET_CHANNEL_ID);
+        } catch (error) {
+          channel = null;
+        }
+      }
 
       if (!channel) {
-        return await interaction.reply({ content: '❌ Error: Target channel not found!', ephemeral: true });
+        return await interaction.reply({ content: '❌ Error: Target channel not found! Make sure the bot has access to it.', ephemeral: true });
       }
 
       await channel.send({
@@ -230,7 +237,7 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.reply({ content: '✅ Your guide message has been successfully sent to the channel!', ephemeral: true });
     }
 
-    // --- /stock COMMAND (Karakter sınırına takılmayacak şekilde bölündü) ---
+    // --- /stock COMMAND ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
       const db = getDB();
       const years = Array.from({ length: 11 }, (_, i) => (2006 + i).toString());
@@ -471,63 +478,4 @@ client.on('interactionCreate', async (interaction) => {
       const stock = db[key] || [];
 
       if (stock.length === 0) {
-        return await interaction.editReply({ content: `❌ Out of stock for **${targetYear} - ${filterType}**. Please wait for new accounts to be added.`, components: [] });
-      }
-
-      const accountData = stock.shift();
-      db[key] = stock;
-      saveDB();
-
-      const currentCount = (userGenCount.get(interaction.user.id) || 0) + 1;
-      userGenCount.set(interaction.user.id, currentCount);
-
-      const isPublic = accountData.inventoryInfo ? accountData.inventoryInfo : 'Public';
-      const statusText = accountData.isBanned ? '🔴 Banned' : '🟢 Active';
-
-      const embed = new EmbedBuilder()
-        .setTitle('👑 PREMIUM ACCOUNT GENERATED')
-        .setURL(`https://www.roblox.com/users/${accountData.id}/profile`)
-        .setColor('#2F3136')
-        .setThumbnail(accountData.avatarUrl)
-        .addFields(
-          { name: '👤 Username', value: `\`\`\`${accountData.name}\`\`\``, inline: false },
-          { name: '📅 Creation Date', value: `\`${accountData.createdDate}\``, inline: true },
-          { name: '🛡️ Status', value: statusText, inline: true },
-          { name: '🌐 Last Activity', value: `\`${accountData.lastOnline || 'Offline'}\``, inline: true },
-          { name: '🎒 Inventory', value: `\`${isPublic}\``, inline: false }
-        )
-        .setFooter({ text: `RadarBlox Premium • Total Generations: ${currentCount}`, iconURL: client.user.displayAvatarURL() })
-        .setTimestamp();
-
-      try {
-        await interaction.user.send({ embeds: [embed] });
-        await interaction.editReply({ content: '✅ Account successfully sent to your DMs!', components: [] });
-      } catch (e) {
-        db[key].unshift(accountData);
-        saveDB();
-        return await interaction.editReply({ content: '❌ Please open your DMs!', components: [] });
-      }
-    }
-
-  } catch (err) {
-    console.error('Interaction error:', err);
-    try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: '❌ An error occurred while processing this command.', components: [] }).catch(() => {});
-      } else {
-        await interaction.reply({ content: '❌ An error occurred while processing this command.' }).catch(() => {});
-      }
-    } catch {}
-  }
-});
-
-if (!TOKEN) {
-  console.error("CRITICAL ERROR: DISCORD_TOKEN is not defined or empty!");
-} else {
-  console.log("Connecting to Discord... Token length:", TOKEN.length);
-  client.login(TOKEN)
-    .then(() => console.log("Discord login successful!"))
-    .catch(err => {
-      console.error("DISCORD CONNECTION ERROR DETAIL:", err);
-    });
-}
+        return await interaction.editReply({
