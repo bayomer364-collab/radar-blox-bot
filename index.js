@@ -80,7 +80,7 @@ function saveDB() {
   });
 }
 
-// 1. EXPRESS HEALTH CHECK SERVER
+// 1. EXPRESS HEALTH CHECK SERVER (Port Sabitlendi)
 const app = express();
 app.use(express.json());
 
@@ -92,7 +92,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Webhook/Health server listening on port ${PORT}`);
 });
@@ -182,7 +182,6 @@ async function runGeneratorLoop() {
       const avatarRes = await fetchJSON(`https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${testId}&size=150x150&format=Png&isCircular=false`);
       const avatarUrl = (avatarRes.data?.data?.[0]) ? avatarRes.data.data[0].imageUrl : 'https://tr.rbxcdn.com/30day-avatar-headshot/150/150/Avatar/Png';
 
-      // Doğrudan hafızaya (memoryDB) kayıt işlemi (Webhook gerekmez!)
       const accountYear = new Date(res.data.created).getFullYear().toString();
       const db = getDB();
       const prefix = isOffSaleAccount ? 'offsale' : 'gen';
@@ -247,7 +246,6 @@ client.once('ready', async () => {
     console.error('Command loading error:', error);
   }
 
-  // Tarayıcı döngüsünü başlat
   runGeneratorLoop();
 });
 
@@ -341,7 +339,6 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.reply({ content: selectedOption ? selectedOption.responseText : '❌ Content not found.', ephemeral: true });
     }
 
-    // 📊 /stock COMMAND
     if (interaction.isChatInputCommand() && interaction.commandName === 'stock') {
       const categorySelect = new StringSelectMenuBuilder()
         .setCustomId(`stock_cat_${interaction.user.id}`)
