@@ -105,7 +105,7 @@ client.on('interactionCreate', async interaction => {
         const enteredText = interaction.fields.getTextInputValue('guide_text');
 
         // Target channel ID where the message will be sent:
-        const targetChannelId = 'HEDEF_KANAL_ID_BURAYA';
+        const targetChannelId = '1538525897005473812';
         const channel = interaction.guild.channels.cache.get(targetChannelId);
 
         if (!channel) {
