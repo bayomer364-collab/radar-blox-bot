@@ -33,11 +33,11 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = '1538484436272676954';
 const WEBHOOK_SECRET = 'GIZLI_SIFRE_12345';
 const ROLE_ID = '1538940771967700992';
-const ALLOWED_USER_ID = '1417227496251981895'; // Sadece bu ID /guide komutunu ve paneli kullanabilir
+const ALLOWED_USER_ID = '1417227496251981895'; // Only this user ID can use the /guide command and panel
 const DB_FILE = path.join(__dirname, 'accounts.json');
 
 // ==========================================================================
-// 🛠️ REHBER MENÜSÜNDEKİ SEÇENEKLERİ VE DETAY YAZILARINI BURADAN DÜZENLEYEBİLİRSİN
+// 🛠️ YOU CAN EDIT GUIDE MENU OPTIONS AND DETAILED DESCRIPTIONS HERE
 // ==========================================================================
 const GUIDE_SELECT_OPTIONS = [
   {
@@ -45,35 +45,35 @@ const GUIDE_SELECT_OPTIONS = [
     description: 'Usernames with 123 at the end or start',
     value: 'guide_method_123',
     emoji: '🔢',
-    responseText: '🔢 **123 Method Detayları:**\n- Kullanıcı adının başında veya sonunda 123 olmalıdır.\n- Örnek: `123john`, `alex123`'
+    responseText: '🔢 **123 Method Details:**\n- The username must start or end with 123.\n- Example: `123john`, `alex123`'
   },
   {
     label: '2 Number Method',
     description: 'Usernames that contain 2 numbers',
     value: 'guide_method_2num',
     emoji: '💡',
-    responseText: '💡 **2 Number Method Detayları:**\n- Kullanıcı adının içinde rastgele 2 adet rakam bulunur.\n- Örnek: `pro99gamer`'
+    responseText: '💡 **2 Number Method Details:**\n- Contains 2 random numbers inside the username.\n- Example: `pro99gamer`'
   },
   {
     label: '321 Method',
     description: 'Usernames with 321 at the end or start',
     value: 'guide_method_321',
     emoji: '🔄',
-    responseText: '🔄 **321 Method Detayları:**\n- Kullanıcı adının başında veya sonunda 321 yer alır.'
+    responseText: '🔄 **321 Method Details:**\n- The username includes 321 at the beginning or at the end.'
   },
   {
     label: '4 Number Method',
     description: 'Usernames with 4 numbers inside',
     value: 'guide_method_4num',
     emoji: '🎰',
-    responseText: '🎰 **4 Number Method Detayları:**\n- 4 haneli sayı içeren hesaplar için geçerli kural ve taktikler.'
+    responseText: '🎰 **4 Number Method Details:**\n- Applicable rules and tactics for accounts containing a 4-digit number.'
   },
   {
     label: 'Cross Method',
     description: 'Cross pattern username rules',
     value: 'guide_method_cross',
     emoji: '❌',
-    responseText: '❌ **Cross Method Detayları:**\n- Çapraz eşleşen kullanıcı adı bulma yöntemidir.'
+    responseText: '❌ **Cross Method Details:**\n- It is a method for finding cross-matching usernames.'
   }
 ];
 
@@ -166,7 +166,7 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
-    // --- /guide Komutu Özel Kontrolü (Modal açacağı için defer edilmemeli) ---
+    // --- /guide Command Special Check (Should not be deferred because it opens a Modal) ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'guide') {
       if (interaction.user.id !== ALLOWED_USER_ID) {
         return await interaction.reply({ content: '❌ You do not have permission to use this command!', ephemeral: true });
@@ -180,7 +180,7 @@ client.on('interactionCreate', async (interaction) => {
         .setCustomId('guide_main_text')
         .setLabel('Enter custom guide description/text:')
         .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('Buraya kendi ana rehber yazını yazabilirsin...')
+        .setPlaceholder('You can write your custom main guide text here...')
         .setValue('📌 **Welcome to the Guide!**\nSelect an option from the menu below to view specific methods and details.')
         .setRequired(true);
 
@@ -188,7 +188,7 @@ client.on('interactionCreate', async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // --- Diğer Chat Input Komutları ---
+    // --- Other Chat Input Commands ---
     if (interaction.isChatInputCommand()) {
       const now = Date.now();
       const isBulk = interaction.commandName === 'bulk-gen';
@@ -220,7 +220,7 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: '❌ You do not have permission to use this!', ephemeral: true });
         }
       } else if (interaction.customId.startsWith('guide_menu_select')) {
-        // Herkes menüyü kullanabilir
+        // Everyone can use the menu
       } else if (ownerId && ownerId !== interaction.user.id && !interaction.customId.startsWith('action_')) {
         return await interaction.reply({ 
           content: '❌ You cannot use this menu or buttons as you did not run the command!', 
