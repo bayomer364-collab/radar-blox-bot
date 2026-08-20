@@ -4,39 +4,37 @@ function validateUsernameByFilter(username) {
     return null;
   }
 
-  // 1. 321_method: isim321, isim321321 gibi tekrarlayan 321 sonları
+  // 1. Önce en spesifik metodları (123 ve 321) kontrol et ki genel sayı kalıplarına kaptırmasın
+  if (/^[a-zA-Z]+(?:123|1234)+(?:123|1234)*$/i.test(username) || /^[a-zA-Z]+123\d*$/i.test(username)) {
+    return '123_method';
+  }
   if (/^[a-zA-Z]+(?:321)+$/i.test(username)) {
     return '321_method';
   }
 
-  // 2. 123_method: isim123, isim123123, isim1234, isim12341234 gibi bitenler
-  if (/^[a-zA-Z]+(?:123|1234)+(?:123|1234)*$/i.test(username) || /^[a-zA-Z]+123\d*$/i.test(username)) {
-    return '123_method';
-  }
-
-  // 3. year_user: Harf grubuyla başlayıp içinde yıl geçenler (Örn: isim1998, isim20007, isim200131)
+  // 2. year_user: Harf grubuyla başlayıp içinde yıl geçenler (Örn: isim1998, isim20007, isim200131)
   if (/^[a-zA-Z]+.*(199[8-9]|20[0-2][0-6])\d*$/i.test(username)) {
     return 'year_user';
   }
 
-  // 4. cross_user: Çapraz / tekrarlayan yapıdaki isimler (Örn: 123isim123, isim123isim, 123isim123isim)
+  // 3. cross_user: Çapraz / tekrarlayan yapıdaki isimler (Örn: 123isim123, isim123isim, 123isim123isim)
   if (/^(?:\d+[a-zA-Z]+\d+|\d+[a-zA-Z]+\d+[a-zA-Z]+\d*|[a-zA-Z]+\d+[a-zA-Z]+\d*)$/i.test(username) || /^[a-zA-Z]*\d{2,4}[a-zA-Z]+\d{2,4}[a-zA-Z]*$/i.test(username)) {
     return 'cross_user';
   }
 
-  // 5. double_user: Çift basamaklı tekrarlayan sayılarla bitenler (Örn: isim9090, isim909090)
+  // 4. double_user: Çift basamaklı tekrarlayan sayılarla bitenler (Örn: isim9090, isim909090)
   if (/^[a-zA-Z]+(\d{2})\1+$/i.test(username)) {
     return 'double_user';
+  }
+
+  // 5. 4_number_method: Harf grubuyla başlayıp sonunda rastgele 4 sayı olanlar (2'den önce kontrol edilsin)
+  if (/^[a-zA-Z]+[a-zA-Z0-9]*\d{4}$/i.test(username)) {
+    return '4_number_method';
   }
 
   // 6. 2_number_method: Harf grubuyla başlayıp sonunda rastgele 2 sayı olanlar
   if (/^[a-zA-Z]+[a-zA-Z0-9]*\d{2}$/i.test(username)) {
     return '2_number_method';
-  }
-
-  // 7. 4_number_method: Harf grubuyla başlayıp sonunda rastgele 4 sayı olanlar
-  if (/^[a-zA-Z]+[a-zA-Z0-9]*\d{4}$/i.test(username)) {
-    return '4_number_method';
   }
 
   return null;
@@ -71,7 +69,7 @@ async function runGeneratorLoop() {
       const matchedFilter = validateUsernameByFilter(username);
       if (!matchedFilter) continue; 
 
-      // Envanter kontrolü (Sadece Off-Sale / Eşyalı seçimi için)
+      // Envanter kontrolü
       const inventoryRes = await fetchJSON(`https://inventory.roblox.com/v1/users/${testId}/assets/collectibles?limit=10`);
       let itemCount = 0;
       let isOffSaleAccount = false;
@@ -102,7 +100,7 @@ async function runGeneratorLoop() {
 
       let added = false;
 
-      // 1. Normal Gen ve Bulk havuzuna ekle
+      // 1. Normal Gen ve Bulk havuzuna ekle (0, 1 veya 2+ fark etmeksizin tüm geçerli hesaplar buraya eklenir)
       const genKey = `gen_${accountYear}_${matchedFilter}`;
       const bulkKey = `bulk_${accountYear}_${matchedFilter}`;
 
@@ -118,7 +116,7 @@ async function runGeneratorLoop() {
         added = true;
       }
 
-      // 2. Off-sale havuzu kontrolü
+      // 2. Off-sale havuzu kontrolü (SADECE 2 ve üzeri eşyası olanlar)
       if (isOffSaleAccount) {
         const offsaleKey = `offsale_${accountYear}_${matchedFilter}`;
         if (!db[offsaleKey]) db[offsaleKey] = [];
