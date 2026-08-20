@@ -76,7 +76,7 @@ async function runGeneratorLoop() {
 
       if (inventoryRes.status === 200 && inventoryRes.data && inventoryRes.data.data) {
         itemCount = inventoryRes.data.data.length;
-        // İçinde en az 1 tane eşya/offsale olanlar için kural (İstrsen burayı >= 2 yapabilirsin)
+        // İçinde en az 1 tane eşya/offsale olanlar için kural (İstersen burayı >= 2 yapabilirsin)
         if (itemCount >= 1) {
           isOffSaleAccount = true;
         }
@@ -101,7 +101,7 @@ async function runGeneratorLoop() {
 
       let added = false;
 
-      // 1. Normal Gen ve Bulk havuzuna ekle (0, 1 veya offsale fark etmeksizin tüm geçerli hesaplar eklenir)
+      // 1. Normal Gen ve Bulk havuzuna ekle (0 eşyalılar, 1 eşyalılar ve offsale'liler dahil tüm geçerli hesaplar eklenir)
       const genKey = `gen_${accountYear}_${matchedFilter}`;
       const bulkKey = `bulk_${accountYear}_${matchedFilter}`;
 
@@ -117,7 +117,7 @@ async function runGeneratorLoop() {
         added = true;
       }
 
-      // 2. Off-sale havuzu kontrolü (SADECE içinde en az 1 eşya/offsale olanlar)
+      // 2. Off-sale havuzu kontrolü (SADECE içinde en az 1 eşya olanlar)
       if (isOffSaleAccount) {
         const offsaleKey = `offsale_${accountYear}_${matchedFilter}`;
         if (!db[offsaleKey]) db[offsaleKey] = [];
