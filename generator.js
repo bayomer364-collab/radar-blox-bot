@@ -4,23 +4,23 @@ function validateUsernameByFilter(username) {
     return null;
   }
 
-  // 1. 321_method: Harf grubuyla başlayan ve 321, 321321, 321321321 şeklinde bitenler (Örn: isim321, kullaniciadi321321)
-  if (/^[a-zA-Z]+(321)+$/i.test(username)) {
+  // 1. 321_method: isim321, isim321321 gibi tekrarlayan 321 sonları
+  if (/^[a-zA-Z]+(?:321)+$/i.test(username)) {
     return '321_method';
   }
 
-  // 2. 123_method: Harf grubuyla başlayan ve 123, 123123, 123123123 veya 1234, 12341234 şeklinde bitenler
-  if (/^[a-zA-Z]+(123|1234)+$/i.test(username)) {
+  // 2. 123_method: isim123, isim123123, isim1234, isim12341234 gibi bitenler
+  if (/^[a-zA-Z]+(?:123|1234)+(?:123|1234)*$/i.test(username) || /^[a-zA-Z]+123\d*$/i.test(username)) {
     return '123_method';
   }
 
-  // 3. year_user: Harf grubuyla başlayıp içinde yıl geçenler (Örn: isim1998, kullanici20007)
+  // 3. year_user: Harf grubuyla başlayıp içinde yıl geçenler (Örn: isim1998, isim20007, isim200131)
   if (/^[a-zA-Z]+.*(199[8-9]|20[0-2][0-6])\d*$/i.test(username)) {
     return 'year_user';
   }
 
-  // 4. cross_user: Çapraz / tekrarlayan yapıdaki isimler (Örn: 123isim123, isim123isim123)
-  if (/^(?:\d+[a-zA-Z]+\d+[a-zA-Z]+|[a-zA-Z]+\d+[a-zA-Z]+\d+)$/i.test(username) || /^(\d{2,3}[a-zA-Z]+)\1+$/i.test(username)) {
+  // 4. cross_user: Çapraz / tekrarlayan yapıdaki isimler (Örn: 123isim123, isim123isim, 123isim123isim)
+  if (/^(?:\d+[a-zA-Z]+\d+|\d+[a-zA-Z]+\d+[a-zA-Z]+\d*|[a-zA-Z]+\d+[a-zA-Z]+\d*)$/i.test(username) || /^[a-zA-Z]*\d{2,4}[a-zA-Z]+\d{2,4}[a-zA-Z]*$/i.test(username)) {
     return 'cross_user';
   }
 
