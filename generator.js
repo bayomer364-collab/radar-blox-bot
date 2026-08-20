@@ -1,36 +1,41 @@
 function validateUsernameByFilter(username) {
-  // 1. 321_method: İsim + 321 veya 321 tekrarı (Örn: isim321, isim321321)
-  if (/^[a-z]+321(321)?$/i.test(username) || /^[a-z]+321+$/i.test(username)) {
+  // İçinde hiç harf yoksa veya tamamen sayılardan oluşuyorsa KESİNLİKLE reddet!
+  if (/^\d+$/.test(username) || !/[a-zA-Z]/.test(username)) {
+    return null;
+  }
+
+  // 1. 321_method: Harf grubuyla başlayan ve 321, 321321, 321321321 şeklinde bitenler (Örn: isim321, kullaniciadi321321)
+  if (/^[a-zA-Z]+(321)+$/i.test(username)) {
     return '321_method';
   }
 
-  // 2. 123_method: İsim + 123/1234 veya tekrarları (Örn: isim123, isim123123, isim1234, isim12341234)
-  if (/^[a-z]+(123|1234)(123|1234)?$/i.test(username)) {
+  // 2. 123_method: Harf grubuyla başlayan ve 123, 123123, 123123123 veya 1234, 12341234 şeklinde bitenler
+  if (/^[a-zA-Z]+(123|1234)+$/i.test(username)) {
     return '123_method';
   }
 
-  // 3. year_user: İçinde 1998 ile 2026 arası yıl geçenler (Örn: isim1998, isim20007)
-  if (/[a-z]+(199[8-9]|20[0-2][0-6])\d*/i.test(username)) {
+  // 3. year_user: Harf grubuyla başlayıp içinde yıl geçenler (Örn: isim1998, kullanici20007)
+  if (/^[a-zA-Z]+.*(199[8-9]|20[0-2][0-6])\d*$/i.test(username)) {
     return 'year_user';
   }
 
   // 4. cross_user: Çapraz / tekrarlayan yapıdaki isimler (Örn: 123isim123, isim123isim123)
-  if (/^(?:\d+[a-z]+\d+[a-z]+|[a-z]+\d+[a-z]+\d+)$/i.test(username) || /^(\d{2,3}[a-z]+)\1+$/i.test(username)) {
+  if (/^(?:\d+[a-zA-Z]+\d+[a-zA-Z]+|[a-zA-Z]+\d+[a-zA-Z]+\d+)$/i.test(username) || /^(\d{2,3}[a-zA-Z]+)\1+$/i.test(username)) {
     return 'cross_user';
   }
 
   // 5. double_user: Çift basamaklı tekrarlayan sayılarla bitenler (Örn: isim9090, isim909090)
-  if (/[a-z]+(\d{2})\1+$/i.test(username)) {
+  if (/^[a-zA-Z]+(\d{2})\1+$/i.test(username)) {
     return 'double_user';
   }
 
-  // 6. 2_number_method: Sonunda rastgele 2 sayı olanlar
-  if (/^[a-z]+\d{2}$/i.test(username)) {
+  // 6. 2_number_method: Harf grubuyla başlayıp sonunda rastgele 2 sayı olanlar
+  if (/^[a-zA-Z]+[a-zA-Z0-9]*\d{2}$/i.test(username)) {
     return '2_number_method';
   }
 
-  // 7. 4_number_method: Sonunda rastgele 4 sayı olanlar
-  if (/^[a-z]+\d{4}$/i.test(username)) {
+  // 7. 4_number_method: Harf grubuyla başlayıp sonunda rastgele 4 sayı olanlar
+  if (/^[a-zA-Z]+[a-zA-Z0-9]*\d{4}$/i.test(username)) {
     return '4_number_method';
   }
 
