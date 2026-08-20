@@ -128,16 +128,21 @@ function fetchJSON(url) {
 function validateUsernameByFilter(username) {
   const lowerName = username.toLowerCase();
   
+  // 1. 123 ve 321 metodları (Öncelikli kontrol: Çakışmayı önlemek için üst sıraya alındı)
+  if (/123|1234|789|999/.test(lowerName)) return '123_method';
+  if (/321|4321|543|876/.test(lowerName)) return '321_method';
+
+  // 2. Cross Method (Çapraz / tekrarlayan yapılar)
   const crossMatch = lowerName.match(/^([a-zA-Z0-9]{2,5}).*?\1$/) || lowerName.match(/^([a-zA-Z]{3,}).*?\1.*?\1$/);
   if (crossMatch && lowerName.length > crossMatch[1].length * 2) return 'cross_user';
   
-  // Sadece gerçek 1999-2026 yılları arasındaki yılları yakalayacak şekilde düzeltildi:
+  // 3. Year Method (1999-2026 arası yıllar)
   if (/([a-zA-Z]+)(199[9]|20[0-1][0-9]|202[0-6])(\d*)/.test(lowerName)) return 'year_user';
   
+  // 4. Double Method (Çift basamaklı tekrarlar)
   if (/(\d{2})\1/.test(lowerName)) return 'double_user';
-  if (/^(123|1234|123123|789|999)\d*$|^\d*(123|1234|123123|789|999)$/.test(lowerName)) return '123_method';
-  if (/^(321|4321|321321|543|876)\d*$|^\d*(321|4321|321321|543|876)$/.test(lowerName)) return '321_method';
   
+  // 5. 2 ve 4 Sayı Metotları
   const digits = lowerName.match(/\d/g);
   if (digits && digits.length === 2) return '2_number_method';
   if (digits && digits.length === 4) return '4_number_method';
@@ -379,7 +384,6 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // Yıl seçildiğinde ayrı ayrı metod butonu sormak yerine tüm metodların stoklarını direkt gösteren güncelleme:
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('stock_year_')) {
       const parts = interaction.customId.split('_');
       const category = parts[2];
